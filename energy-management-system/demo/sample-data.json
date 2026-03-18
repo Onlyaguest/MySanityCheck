@@ -1,0 +1,326 @@
+{
+  "description": "精力管理系统真实数据示例（2026-03-09 至 2026-03-10）",
+  "data_source": "基于 7 天真实使用数据",
+  "days": [
+    {
+      "date": "2026-03-09",
+      "day_of_week": "周日",
+      "time_range": "全天",
+      "energy_line": {
+        "initial": 100,
+        "final": 85,
+        "net_change": -15,
+        "status": "健康",
+        "status_emoji": "🟢"
+      },
+      "time_line": {
+        "screen_time_hours": null,
+        "quality_time_blocks": 2,
+        "fragmented_time_blocks": 3
+      },
+      "mood_line": {
+        "average": 70,
+        "high": 80,
+        "low": 55,
+        "note": "情绪波动，有戾气需要处理"
+      },
+      "events": {
+        "charging": [
+          {
+            "time": "06:10-08:50",
+            "event": "陪娃早晨流程（陪睡、送学校、回笼觉）",
+            "points": 10,
+            "tag": "family",
+            "emoji": "👨‍👧"
+          },
+          {
+            "time": "11:16",
+            "event": "摸鱼 rest 一下",
+            "points": 5,
+            "tag": "rest",
+            "emoji": "☕"
+          },
+          {
+            "time": "12:00",
+            "event": "午餐",
+            "points": 5,
+            "tag": "meal",
+            "emoji": "🍱"
+          },
+          {
+            "time": "13:20",
+            "event": "午睡 + 看小说",
+            "points": 10,
+            "tag": "rest",
+            "emoji": "😴"
+          }
+        ],
+        "draining": [
+          {
+            "time": "10:00-11:00",
+            "event": "Meeting with Lawrence - Physical AI 演进方向",
+            "points": -20,
+            "tag": "Sprint",
+            "emoji": "🏃",
+            "note": "开发者支持讨论，涉及多方协调"
+          },
+          {
+            "time": "10:02",
+            "event": "Daily checklist 处理",
+            "points": -5,
+            "tag": "Debt",
+            "emoji": "📋"
+          },
+          {
+            "time": "10:48",
+            "event": "反思与 FengXiaodong 沟通问题（有戾气）",
+            "points": -15,
+            "tag": "Friction",
+            "emoji": "🚧",
+            "note": "情绪消耗，需要自我调整和快速反思"
+          },
+          {
+            "time": "16:21",
+            "event": "Findy 安排下周时间",
+            "points": -5,
+            "tag": "Debt",
+            "emoji": "📋"
+          }
+        ]
+      },
+      "top_drains": [
+        {
+          "rank": 1,
+          "event": "Lawrence 会议 - 开发者支持讨论",
+          "points": -20,
+          "percentage": 44,
+          "note": "重要会议，需要深度讨论和多方协调"
+        },
+        {
+          "rank": 2,
+          "event": "情绪管理 - FengXiaodong 沟通反思",
+          "points": -15,
+          "percentage": 33,
+          "note": "戾气处理，情绪消耗较大"
+        },
+        {
+          "rank": 3,
+          "event": "碎片任务处理",
+          "points": -10,
+          "percentage": 22,
+          "note": "Daily checklist + Findy 排期"
+        }
+      ],
+      "insights": [
+        "总充电 +30，总放电 -45，净消耗 -15",
+        "情绪消耗占比 33%（-15/-45），需要注意",
+        "午睡 + 看小说充电效果好（+10）",
+        "陪娃时间充足，家庭充电稳定（+10）",
+        "下午基本在休息和轻度工作，精力保护得当"
+      ],
+      "tomorrow_suggestions": [
+        "继续注意情绪管理，避免戾气累积",
+        "会议前做好准备，减少情绪消耗",
+        "保持午睡习惯，充电效果明显",
+        "注意血糖控制，调整饮食结构"
+      ]
+    },
+    {
+      "date": "2026-03-10",
+      "day_of_week": "周一",
+      "time_range": "上午（07:10-11:03）",
+      "energy_line": {
+        "initial": 100,
+        "final": 85,
+        "net_change": -15,
+        "status": "健康",
+        "status_emoji": "🟢"
+      },
+      "time_line": {
+        "screen_time_hours": 3.28,
+        "social_minutes": 120,
+        "productivity_minutes": 60,
+        "entertainment_minutes": 17
+      },
+      "mood_line": {
+        "average": 75,
+        "high": 85,
+        "low": 60,
+        "note": "吾日三省处理心理问题，效果好"
+      },
+      "events": {
+        "charging": [
+          {
+            "time": "07:10",
+            "event": "陪娃一起睡",
+            "points": 5,
+            "tag": "family",
+            "emoji": "👨‍👧"
+          },
+          {
+            "time": "08:30",
+            "event": "摸鱼刷手机（放松）",
+            "points": 5,
+            "tag": "rest",
+            "emoji": "📱",
+            "note": "虽然注意力不集中，但刷手机是充电方式"
+          },
+          {
+            "time": "09:01",
+            "event": "吾日三省（处理心理问题）",
+            "points": 10,
+            "tag": "Aha",
+            "emoji": "⚡",
+            "note": "处理心理问题是加分的，自我调节"
+          },
+          {
+            "time": "09:43",
+            "event": "rest（电脑没电，收拾完了）",
+            "points": 5,
+            "tag": "rest",
+            "emoji": "☕"
+          },
+          {
+            "time": "11:03",
+            "event": "边走路边和 OpenClaw 交流",
+            "points": 5,
+            "tag": "Flow",
+            "emoji": "🚶",
+            "note": "比较舒服的状态"
+          }
+        ],
+        "draining": [
+          {
+            "time": "08:00",
+            "event": "和爸爸在体重问题上反复争执",
+            "points": -25,
+            "tag": "Friction",
+            "emoji": "🚧",
+            "note": "家庭争执，情绪消耗很大"
+          },
+          {
+            "time": "09:02",
+            "event": "20min 冲刺（程剑涛回复 + checklist）",
+            "points": -10,
+            "tag": "Sprint",
+            "emoji": "🏃",
+            "note": "快速回复，更果断，没有内耗。昨晚做了推演所以今天很快"
+          },
+          {
+            "time": "09:21",
+            "event": "OpenClaw 笔记整理（OB 同步、Git、checklist 同步）",
+            "points": -10,
+            "tag": "Flow",
+            "emoji": "📝",
+            "note": "干了很多不错的事情，其实也是比较好的，不太耗能。带来规律感和掌控感"
+          }
+        ]
+      },
+      "top_drains": [
+        {
+          "rank": 1,
+          "event": "家庭争执（和爸爸体重问题）",
+          "points": -25,
+          "percentage": 56,
+          "note": "情绪消耗最大"
+        },
+        {
+          "rank": 2,
+          "event": "20min 冲刺",
+          "points": -10,
+          "percentage": 22,
+          "note": "效率高，昨晚推演有效果"
+        },
+        {
+          "rank": 3,
+          "event": "OpenClaw 笔记整理",
+          "points": -10,
+          "percentage": 22,
+          "note": "干了很多不错的事情，不太耗能，带来规律感和掌控感"
+        }
+      ],
+      "insights": [
+        "上午总充电 +30，总放电 -45，净消耗 -15",
+        "精力池从 100 降到 85，状态健康",
+        "最大漏电点：家庭争执（-25），占总消耗 56%",
+        "正面：吾日三省处理心理问题（+10），自我调节效果好",
+        "正面：摸鱼刷手机是充电方式（+5），放松有效",
+        "正面：OpenClaw 笔记整理干了很多不错的事情，不太耗能（-10）",
+        "正面：边走路边和 OpenClaw 交流，比较舒服的状态（+5）",
+        "正面：20min 冲刺效率高，昨晚推演有效果",
+        "屏幕使用时间 3h17m，社交类占 2h（微信等）"
+      ],
+      "tomorrow_suggestions": [
+        "避免家庭争执话题（体重问题），及时止损",
+        "继续保持吾日三省习惯，处理心理问题效果好",
+        "继续保持昨晚推演的习惯，提升第二天效率",
+        "摸鱼刷手机是有效的充电方式，不要自责",
+        "边走路边交流是舒服的状态，可以多用"
+      ]
+    }
+  ],
+  "energy_rate_rules": {
+    "charging_events": {
+      "family": {
+        "陪娃": 10,
+        "陪睡": 5,
+        "家庭时光": 10
+      },
+      "rest": {
+        "午睡": 10,
+        "摸鱼": 5,
+        "看小说": 5,
+        "散步": 5
+      },
+      "aha": {
+        "深度对话": 10,
+        "吾日三省": 10,
+        "找到解决方案": 8
+      }
+    },
+    "draining_events": {
+      "friction": {
+        "家庭争执": -25,
+        "客户反复沟通": -25,
+        "情绪管理": -15,
+        "低效会议": -20
+      },
+      "sprint": {
+        "20min 冲刺": -10,
+        "深度工作": -15,
+        "重要会议": -20
+      },
+      "debt": {
+        "碎片任务": -5,
+        "日常维护": -5
+      }
+    }
+  },
+  "status_levels": {
+    "80-100": {
+      "label": "充沛",
+      "emoji": "🟢",
+      "recommendation": "高难度创造任务"
+    },
+    "60-79": {
+      "label": "良好",
+      "emoji": "🟡",
+      "recommendation": "中等强度工作"
+    },
+    "40-59": {
+      "label": "疲劳",
+      "emoji": "🟠",
+      "recommendation": "轻量任务或学习"
+    },
+    "20-39": {
+      "label": "耗竭",
+      "emoji": "🔴",
+      "recommendation": "强制休息"
+    },
+    "0-19": {
+      "label": "崩溃",
+      "emoji": "⚫",
+      "recommendation": "紧急干预"
+    }
+  }
+}
