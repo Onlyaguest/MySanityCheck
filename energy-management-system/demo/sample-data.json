@@ -1,7 +1,154 @@
 {
-  "description": "精力管理系统真实数据示例（2026-03-09 至 2026-03-10）",
+  "description": "精力管理系统真实数据示例（2026-03-07 至 2026-03-10）",
   "data_source": "基于 7 天真实使用数据",
   "days": [
+    {
+      "date": "2026-03-07",
+      "day_of_week": "周五",
+      "time_range": "全天",
+      "energy_line": {
+        "initial": 100,
+        "final": 25,
+        "net_change": -75,
+        "status": "耗竭",
+        "status_emoji": "🔴"
+      },
+      "time_line": {
+        "screen_time_hours": 8.0,
+        "social_minutes": 201,
+        "productivity_minutes": 109,
+        "entertainment_minutes": 64
+      },
+      "mood_line": {
+        "average": 55,
+        "high": 75,
+        "low": 35,
+        "note": "Findy 会议拉扯，微信高频消耗"
+      },
+      "events": {
+        "charging": [
+          {
+            "time": "16:20",
+            "event": "陪阿橘（学校、超市、回家）",
+            "points": 10,
+            "tag": "family",
+            "emoji": "👨‍👧"
+          },
+          {
+            "time": "12:10",
+            "event": "吃饭",
+            "points": 5,
+            "tag": "meal",
+            "emoji": "🍱"
+          },
+          {
+            "time": "12:30",
+            "event": "陪娃睡觉",
+            "points": 5,
+            "tag": "family",
+            "emoji": "😴"
+          },
+          {
+            "time": "13:30",
+            "event": "和爸爸聊未来计划",
+            "points": 10,
+            "tag": "family",
+            "emoji": "💬"
+          }
+        ],
+        "draining": [
+          {
+            "time": "02:25",
+            "event": "卡快捷指令",
+            "points": -10,
+            "tag": "Debt",
+            "emoji": "📋"
+          },
+          {
+            "time": "09:00",
+            "event": "Findy 蓝白律所需求对齐",
+            "points": -20,
+            "tag": "Sprint",
+            "emoji": "🏃",
+            "note": "来回拉扯"
+          },
+          {
+            "time": "11:00",
+            "event": "Findy 再次对齐认知",
+            "points": -15,
+            "tag": "Sprint",
+            "emoji": "🏃",
+            "note": "沟通效率低"
+          },
+          {
+            "time": "19:57",
+            "event": "OpenClaw Google 全家桶配置",
+            "points": -10,
+            "tag": "Debt",
+            "emoji": "🔧"
+          },
+          {
+            "time": "21:22",
+            "event": "Daily checklist 处理",
+            "points": -15,
+            "tag": "Debt",
+            "emoji": "📋"
+          },
+          {
+            "time": "22:00",
+            "event": "开源 Vibe Coding 会议",
+            "points": -15,
+            "tag": "Sprint",
+            "emoji": "🏃"
+          },
+          {
+            "time": "全天",
+            "event": "微信高频使用 2h49m",
+            "points": -20,
+            "tag": "Friction",
+            "emoji": "🚧",
+            "note": "持续消耗，隐形漏电"
+          }
+        ]
+      },
+      "top_drains": [
+        {
+          "rank": 1,
+          "event": "Findy 双重会议",
+          "points": -35,
+          "percentage": 33,
+          "note": "上午两次会议，来回拉扯"
+        },
+        {
+          "rank": 2,
+          "event": "碎片化任务处理",
+          "points": -35,
+          "percentage": 33,
+          "note": "凌晨、晚上分散处理任务"
+        },
+        {
+          "rank": 3,
+          "event": "微信社交消耗",
+          "points": -20,
+          "percentage": 19,
+          "note": "2h49m 持续消耗"
+        }
+      ],
+      "insights": [
+        "总屏幕时间 8 小时（iPhone + Mac）",
+        "微信占用 2h49m，是最大单项消耗",
+        "上午两个 Findy 会议效率低",
+        "陪娃时间充足，家庭充电效果好",
+        "缺少连续深度工作时间",
+        "净消耗 -75，精力严重透支"
+      ],
+      "tomorrow_suggestions": [
+        "控制微信使用时段，避免碎片化",
+        "会议尽量集中，避免上午两次",
+        "保护晚上深度工作时间",
+        "增加休息时间，恢复精力"
+      ]
+    },
     {
       "date": "2026-03-09",
       "day_of_week": "周日",

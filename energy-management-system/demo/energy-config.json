@@ -1,0 +1,109 @@
+{
+  "version": "2.0",
+  "created": "2026-03-08",
+  "last_updated": "2026-03-08",
+  
+  "user": {
+    "name": "Vivi",
+    "timezone": "Asia/Shanghai",
+    "initial_energy": 100,
+    "language": "zh-CN"
+  },
+  
+  "energy_rates": {
+    "charging": {
+      "family_time": 10,
+      "meal": 10,
+      "train_buffer": 10,
+      "deep_conversation": 5,
+      "nap": 5,
+      "gaming": 5,
+      "rest": 5
+    },
+    "draining": {
+      "friction_min": -25,
+      "friction_max": -35,
+      "sprint_min": -15,
+      "sprint_max": -20,
+      "debt_min": -5,
+      "debt_max": -10,
+      "social_drain": -25
+    },
+    "hidden_consumption": {
+      "mobile_usage_coefficient": 0.5,
+      "context_switch_cost": 2
+    }
+  },
+  
+  "thresholds": {
+    "critical": 20,
+    "warning": 40,
+    "good": 60,
+    "excellent": 80
+  },
+  
+  "data_sources": {
+    "roam": {
+      "account": ":yuanvv",
+      "command": "bb daily :yuanvv"
+    },
+    "screen_time": {
+      "source": "iphone_mac_combined",
+      "format": "screenshot_ocr"
+    },
+    "health_data": {
+      "source": "iphone_shortcuts",
+      "discord_webhook": ""
+    }
+  },
+  
+  "triggers": {
+    "morning_calibration": ["早上好", "good morning"],
+    "evening_review": ["下班了", "收工", "今天结束了"],
+    "energy_query": ["我还有多少精力", "精力状态", "energy status"],
+    "energy_analysis": ["精力分析", "本周精力", "energy analysis"],
+    "activate": ["开启精力管理", "activate energy manager"],
+    "deactivate": ["关闭精力管理", "deactivate energy manager"]
+  },
+  
+  "schedule": {
+    "morning_reminder": {
+      "enabled": false,
+      "time": "09:00",
+      "message": "🌅 早上好！准备开始今天的精力校准吗？"
+    },
+    "evening_reminder": {
+      "enabled": true,
+      "time": "23:00",
+      "message": "📸 晚间对账时间到了，记得上传屏幕时间截图哦！"
+    },
+    "weekly_report": {
+      "enabled": true,
+      "day": "Monday",
+      "time": "09:00"
+    }
+  },
+  
+  "features": {
+    "auto_calibration": true,
+    "silent_deduction": true,
+    "cognitive_bias_detection": true,
+    "pattern_recognition": true,
+    "weekly_report": true,
+    "monthly_summary": false
+  },
+  
+  "state": {
+    "active": true,
+    "current_energy": 100,
+    "last_calibration": null,
+    "last_review": null
+  },
+  
+  "notes": [
+    "精力汇率规则基于 2026-03-01 到 2026-03-07 的数据校准",
+    "阈值设置参考 Vivi 的个人精力模式",
+    "Discord Webhook 需要在首次使用时配置",
+    "建议连续使用 7 天后进行首次校准"
+  ]
+}

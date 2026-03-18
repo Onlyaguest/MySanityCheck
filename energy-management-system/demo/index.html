@@ -81,6 +81,16 @@
             color: #0a7d3e;
         }
 
+        .status-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-critical {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
         .three-lines {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -316,10 +326,12 @@
                 const dayCard = document.createElement('div');
                 dayCard.className = 'day-card';
                 
+                const statusClass = day.energy_line.final >= 60 ? 'status-healthy' : day.energy_line.final >= 40 ? 'status-warning' : 'status-critical';
+                
                 dayCard.innerHTML = `
                     <div class="day-header">
                         <div class="day-title">${day.date} ${day.day_of_week}</div>
-                        <div class="status-badge status-healthy">
+                        <div class="status-badge ${statusClass}">
                             <span>${day.energy_line.status_emoji}</span>
                             <span>${day.energy_line.status}</span>
                         </div>
