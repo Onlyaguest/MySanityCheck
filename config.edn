@@ -1,0 +1,86 @@
+{;; === Energy Line ===
+ :energy
+ {:default 100
+  :complaint 80
+  :min 0
+  :max 100
+  :natural-decay-per-hour -2
+  :screen-decay {:active-gt-45min -5  ;; per hour
+                 :app-switches-gt-15 -3
+                 :passive -1}
+  :rates {:aha +5
+          :friction -30
+          :sprint -18
+          :social-drain -25
+          :family-time +10
+          :solo-rest +10
+          :deep-convo +5
+          :outdoor +8
+          :nap +15
+          :meeting-per-hour -10
+          :context-switch -5}
+  :levels [[80 "充沛" "🟢"]
+           [60 "良好" "🟡"]
+           [40 "疲劳" "🟠"]
+           [20 "耗竭" "🔴"]
+           [0  "崩溃" "⚫"]]}
+
+ ;; === Mood Line ===
+ :mood
+ {:default 80
+  :complaint 60
+  :min 0
+  :max 100
+  :regression-per-hour 2  ;; toward baseline
+  :rates {:aha +10
+          :friction -15
+          :sprint 0
+          :social-drain -8
+          :family-time +10
+          :solo-rest +5
+          :deep-convo +10
+          :outdoor +8
+          :nap +5
+          :task-complete +8
+          :positive-feedback +5
+          :family-conflict -20
+          :work-setback -10
+          :social-pressure -8
+          :body-discomfort -10}
+  :levels [[80 "愉悦" "😊"]
+           [60 "平和" "😌"]
+           [40 "低落" "😐"]
+           [20 "沮丧" "😔"]
+           [0  "崩溃" "😭"]]}
+
+ ;; === Time Line ===
+ :time
+ {:sleep-hours 8
+  :quality {:deep-min 120  ;; >=2h continuous = 优质
+            :good-min 60   ;; 1-2h = 良好
+            :frag-min 0}   ;; <1h = 碎片
+  :levels [[4 "充裕" "🟢"]
+           [2 "适中" "🟡"]
+           [1 "紧张" "🟠"]
+           [0 "匮乏" "🔴"]]}
+
+ ;; === Alerts ===
+ :alerts
+ {:energy-critical 30
+  :mood-low 40
+  :time-scarce 1}  ;; hours
+
+ ;; === Complaint Detection ===
+ :complaint-keywords
+ #{"累" "烦" "没睡好" "不想" "头疼" "难受" "焦虑" "失眠" "不舒服"}
+
+ ;; === Server ===
+ :server {:port 8400}
+
+ ;; === Secrets (loaded from separate file, gitignored) ===
+ :secrets-file "secrets.edn"
+
+ ;; === Polling Intervals (minutes) ===
+ :intervals
+ {:screentime 30
+  :roam 60}}
