@@ -195,6 +195,18 @@ raw-buffer: [..., "[[status/raw]] 研究 Screen Time API 方案", ...]
 
 ---
 
+## FDA Notes
+
+FDA grants access to the **parent process** (Terminal.app), not child processes. If running inside tmux, the tmux server was launched before FDA was granted, so child processes (including bb) still get "Operation not permitted". 
+
+**Workaround for tmux users:** Launch bb from Terminal.app directly via osascript:
+```bash
+osascript -e 'tell application "Terminal" to do script "cd /Users/yuan/ems && /usr/local/bin/bb run"'
+```
+This spawns a new Terminal.app window (which has FDA) and runs bb there.
+
+---
+
 ## Open Questions / Blockers
 
 1. **FDA grant pending** — tmux reboot needed for Terminal to pick up FDA. Screen Time collector can't return real data until then.

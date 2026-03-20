@@ -106,3 +106,56 @@ Full diagnostic on init:
 | Secrets | Multi-env secrets.edn | 03-20 | `:env` key selects staging/prod. `resolve-env` flattens at startup. |
 | Cloud relay | Cloudflare Tunnel (planned) | 03-19 | Free, stable. Not yet set up. |
 | Ed25519 | Deferred (CF Worker proxy planned) | 03-20 | bb lacks native Ed25519. CF Worker at edge is cleanest. |
+
+---
+
+## 5. FDA + Launch Strategy (2026-03-20)
+
+### The Problem
+- FDA (Full Disk Access) is granted per-binary. Terminal.app has FDA, so `bb` run from Terminal.app can read `knowledgeC.db`.
+- **tmux inherits the FDA of the process that started it.** If tmux server was started before FDA was granted, all tmux panes lack FDA — even after the grant. Restarting tmux server fixes it, but that's fragile.
+- kiro-cli-chat runs inside tmux → no FDA → Screen Time collector fails silently.
+
+### The Solution: Three launch paths
+
+1. **Production: launchd (recommended)**
+   - launchd services inherit FDA from the system. A plist that runs `bb run` will have FDA as long as the `bb` binary (or its parent) has FDA.
+   - This is the correct long-term path. The daemon auto-starts on login, always has FDA.
+
+2. **Development: Terminal.app directly**
+   - `open -a Terminal.app` then `cd /Users/yuan/ems && bb run`
+   - Works immediately. FDA inherited.
+
+3. **Fallback: osascript relaunch from bb run**
+   - If Screen Time collector fails with permission error during `bb run`, auto-relaunch in Terminal.app:
+   ```
+   osascript -e 'tell app "Terminal" to do script "cd /Users/yuan/ems && bb run"'
+   ```
+   - This gives the new process FDA via Terminal.app.
+
+### Implementation Plan
+- `bb init` already detects FDA failure and prints instructions.
+- `bb run` should: attempt first Screen Time read → if permission denied → print warning + offer osascript relaunch.
+- launchd plist (TODO) is the real fix. osascript is a dev convenience.
+
+### launchd Plist (TODO — next task)
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "...">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.ems.daemon</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/bb</string>
+    <string>run</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/yuan/ems</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/Users/yuan/ems/ems.log</string>
+  <key>StandardErrorPath</key><string>/Users/yuan/ems/ems.err</string>
+</dict>
+</plist>
+```
+Install: `cp com.ems.daemon.plist ~/Library/LaunchAgents/ && launchctl load ~/Library/LaunchAgents/com.ems.daemon.plist`

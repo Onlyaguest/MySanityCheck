@@ -9,7 +9,7 @@
 | File | Status | Description |
 |------|--------|-------------|
 | `test/ems/engine_test.clj` | ✅ Passing | 4 tests, 31 assertions. Smoke test for `compute-state`, calibration (no-complaint, complaint), empty inputs |
-| `scripts/test-pipeline.clj` | ✅ Passing | End-to-end integration: loads config+secrets → resolves staging env → calls Roam collector → feeds engine → prints snapshot → sends Discord message |
+| `scripts/test-pipeline.clj` | ✅ Passing | End-to-end integration: loads config+secrets → resolves staging env → collects Screen Time (real, last 24h) + Roam → feeds engine → prints snapshot → sends Discord message. Requires FDA. |
 | `bb.edn` test task | ✅ Fixed | Was broken (just `load-file`, never ran tests). Now uses `clojure.test/run-tests` with exit code on failure |
 
 ### Test Results (latest run)
@@ -71,6 +71,15 @@
 - `with-redefs` for mocking external deps
 - Clock injection via `now` parameter (no system clock in engine)
 - `now-morning` pattern for calibration tests (zero elapsed time = no regression)
+
+### ⚠️ FDA Requirement for Screen Time Tests
+Tests that touch macOS Screen Time (`knowledgeC.db`) **must** run from a process with Full Disk Access:
+- ✅ Terminal.app (after FDA granted in System Settings → Privacy & Security → Full Disk Access)
+- ✅ launchd daemon (inherits FDA from parent)
+- ❌ tmux — will NOT have FDA unless tmux was **restarted after** FDA was granted to Terminal.app
+- ❌ SSH sessions — no FDA unless explicitly granted
+
+If `screentime/collect` returns empty with no warning, FDA is the likely cause. The script prints a diagnostic when this happens.
 
 ### Key Edge Cases to Cover
 | Case | Status |

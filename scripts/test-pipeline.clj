@@ -1,12 +1,17 @@
 #!/usr/bin/env bb
 
-;; Integration test: Roam collector → Engine → Discord (staging)
+;; Integration test: Screen Time + Roam → Engine → Discord (staging)
 ;; Usage: bb scripts/test-pipeline.clj
+;;
+;; ⚠️  FDA REQUIREMENT: This script reads macOS knowledgeC.db.
+;; Must run from a process with Full Disk Access (Terminal.app or launchd).
+;; Will NOT work from tmux unless tmux was restarted after FDA was granted.
 
 (require '[babashka.pods :as pods])
 (pods/load-pod 'org.babashka/go-sqlite3 "0.3.13")
 
 (require '[ems.engine :as engine]
+         '[ems.collector.screentime :as st]
          '[ems.collector.roam :as roam]
          '[ems.discord :as discord]
          '[cheshire.core :as json])
@@ -34,39 +39,52 @@
                                (:staging-channel d))})]
 
   (println (str "▸ env: " env))
-  (println (str "▸ roam graph: " (:graph roam-cfg)))
   (println (str "▸ date: " (:date roam-cfg)))
   (println)
 
-  ;; --- 2. Call Roam collector ---
-  (println "▸ Collecting from Roam...")
-  (let [roam-data (roam/collect roam-cfg)]
-    (println (str "  morning-text: " (pr-str (:morning-text roam-data))))
-    (println (str "  events: " (count (:events roam-data))))
-    (println (str "  energy-tags: " (count (:energy-tags roam-data))))
-    (println (str "  mood-tags: " (count (:mood-tags roam-data))))
-    (println (str "  raw-buffer: " (count (:raw-buffer roam-data))))
+  ;; --- 2. Collect Screen Time (last 24h) ---
+  (println "▸ Collecting Screen Time...")
+  (let [since   (- (quot (System/currentTimeMillis) 1000) 86400)
+        st-data (st/collect {:since since})]
+    (println (str "  hourly buckets: " (count st-data)))
+    (when (seq st-data)
+      (let [total-min (reduce + 0 (map :total-minutes st-data))
+            total-sw  (reduce + 0 (map :app-switches st-data))]
+        (println (str "  total minutes: " total-min))
+        (println (str "  total app switches: " total-sw))))
+    (when (empty? st-data)
+      (println "  ⚠️  No data — check FDA permissions (must run from Terminal.app, not tmux)"))
     (println)
 
-    ;; --- 3. Feed to engine ---
-    (println "▸ Computing state (no screen-time in staging)...")
-    (let [now   (str (java.time.ZonedDateTime/now))
-          state (engine/compute-state [] roam-data config now)]
-
-      ;; --- 4. Print full snapshot ---
-      (println)
-      (println "=== STATE SNAPSHOT ===")
-      (println (json/generate-string state {:pretty true}))
+    ;; --- 3. Collect Roam ---
+    (println "▸ Collecting from Roam...")
+    (let [roam-data (roam/collect roam-cfg)]
+      (println (str "  morning-text: " (pr-str (:morning-text roam-data))))
+      (println (str "  events: " (count (:events roam-data))))
+      (println (str "  raw-buffer: " (count (:raw-buffer roam-data))))
       (println)
 
-      ;; --- 5. Send test message to Discord staging ---
-      (println "▸ Sending to Discord staging channel...")
-      (let [msg  (str "🧪 Pipeline test @ " (:date roam-cfg)
-                      "\n" (discord/format-state state))
-            resp (discord/send-alert! dc {:message msg})]
-        (if resp
-          (println "✓ Discord message sent")
-          (println "✗ Discord send failed")))
+      ;; --- 4. Feed to engine ---
+      (println "▸ Computing state...")
+      (let [now   (str (java.time.ZonedDateTime/now))
+            state (engine/compute-state st-data roam-data config now)]
 
-      (println)
-      (println "✓ Pipeline test complete"))))
+        ;; --- 5. Print snapshot ---
+        (println)
+        (println "=== STATE SNAPSHOT ===")
+        (println (json/generate-string state {:pretty true}))
+        (println)
+
+        ;; --- 6. Send to Discord staging ---
+        (println "▸ Sending to Discord staging channel...")
+        (let [msg  (str "🧪 Pipeline test @ " (:date roam-cfg)
+                        "\n" (discord/format-state state)
+                        (when (seq st-data)
+                          (str "\n📱 Screen Time: " (count st-data) " buckets")))
+              resp (discord/send-alert! dc {:message msg})]
+          (if resp
+            (println "✓ Discord message sent")
+            (println "✗ Discord send failed")))
+
+        (println)
+        (println "✓ Pipeline test complete")))))
