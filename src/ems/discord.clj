@@ -3,6 +3,8 @@
   (:require [babashka.http-client :as http]
             [cheshire.core :as json]))
 
+;; --- Bot API messaging ---
+
 (defn- post-message!
   "POST message to Discord channel via Bot API. Returns nil on error."
   [{:keys [bot-token channel-id]} content]
@@ -25,20 +27,10 @@
        "\n💡 推荐: " (:task-type recommendation)))
 
 (defn send-alert!
-  "Send engine alert to Discord channel."
   [discord-cfg alert]
   (post-message! discord-cfg (:message alert)))
 
-(defn handle-interaction
-  "Handle /state slash command. Returns Discord interaction response map."
-  [state dashboard-url]
-  (let [msg (str (format-state state)
-                 (when dashboard-url
-                   (str "\n📊 Dashboard: " dashboard-url "/" (:date state))))]
-    {:type 4 :data {:content msg}}))
-
 (defn send-summary!
-  "Send morning/evening summary to Discord channel."
   [discord-cfg state summary-type]
   (let [header (case summary-type
                  :morning "☀️ 晨间校准"
@@ -48,3 +40,39 @@
                      (str "\n⚠️ " (count (:alerts state)) " 条预警"))
         msg (str header "\n" (format-state state) alerts-str)]
     (post-message! discord-cfg msg)))
+
+;; --- Interaction endpoint (slash commands) ---
+
+(defn verify-signature
+  "Verify Discord Ed25519 signature. TODO: implement real verification."
+  [_req _public-key]
+  true)
+
+(defn handle-interaction
+  "Ring handler for POST /discord/interactions.
+   state-atom: atom holding current engine state.
+   dashboard-url: base URL for Vercel dashboard (or nil)."
+  [req state-atom dashboard-url]
+  (let [body (json/parse-string (slurp (:body req)) true)
+        typ  (:type body)]
+    (cond
+      ;; PING — Discord verification handshake
+      (= typ 1)
+      {:status 200
+       :headers {"Content-Type" "application/json"}
+       :body (json/generate-string {:type 1})}
+
+      ;; APPLICATION_COMMAND — slash command
+      (= typ 2)
+      (let [state @state-atom
+            msg   (str (format-state state)
+                       (when dashboard-url
+                         (str "\n📊 Dashboard: " dashboard-url "/" (:date state))))]
+        {:status 200
+         :headers {"Content-Type" "application/json"}
+         :body (json/generate-string {:type 4 :data {:content msg}})})
+
+      :else
+      {:status 400
+       :headers {"Content-Type" "application/json"}
+       :body (json/generate-string {:error "unknown interaction type"})})))

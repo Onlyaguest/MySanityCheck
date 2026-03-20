@@ -24,6 +24,7 @@
    :energy-tags []})
 
 (def now "2026-03-19T14:30:00+08:00")
+(def now-morning "2026-03-19T08:00:00+08:00")
 
 ;; --- Smoke test ---
 
@@ -64,15 +65,15 @@
 
 (deftest morning-calibration-no-complaint
   (testing "no complaint → energy 100, mood 80 + event impacts"
-    (let [state (engine/compute-state [] mock-roam {} now)]
+    (let [state (engine/compute-state [] mock-roam {} now-morning)]
       (is (>= (get-in state [:energy :value]) 0))
-      ;; mood starts 80, :aha adds +10 → 90
+      ;; mood starts 80, :aha adds +10 → 90, no regression at 08:00
       (is (= 90 (get-in state [:mood :value]))
           "mood starts at 80, :aha event adds +10"))))
 
 (deftest morning-calibration-with-complaint
   (testing "complaint → energy 80, mood 60"
-    (let [state (engine/compute-state [] mock-roam-complaint {} now)]
+    (let [state (engine/compute-state [] mock-roam-complaint {} now-morning)]
       (is (= 80 (get-in state [:energy :value]))
           "energy starts at 80 with complaint, no decay (empty screen time)")
       (is (= 60 (get-in state [:mood :value]))
@@ -80,7 +81,7 @@
 
 (deftest empty-inputs-produce-defaults
   (testing "nil/empty inputs still return valid state"
-    (let [state (engine/compute-state [] {:morning-text nil :events []} {} now)]
+    (let [state (engine/compute-state [] {:morning-text nil :events []} {} now-morning)]
       (is (= 100 (get-in state [:energy :value])))
       (is (= 80  (get-in state [:mood :value])))
       (is (empty? (:events state)))

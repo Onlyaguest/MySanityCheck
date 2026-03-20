@@ -1,0 +1,43 @@
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,system-ui,sans-serif;background:#0d1117;color:#e6edf3;max-width:480px;margin:0 auto;padding:16px;line-height:1.5}
+header{display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:1px solid #21262d}
+h1{font-size:1.2rem;font-weight:600}
+h2{font-size:1rem;font-weight:600;margin-bottom:8px}
+.phase{font-size:.75rem;color:#8b949e;background:#161b22;padding:2px 8px;border-radius:12px}
+
+/* Alerts */
+.alerts{margin:12px 0}
+.alert{padding:8px 12px;border-radius:8px;font-size:.85rem;margin-bottom:6px}
+.alert.critical{background:#3d1114;border:1px solid #f8514966}
+.alert.warn{background:#2a1e00;border:1px solid #d29922aa}
+
+/* Gauges */
+.gauges{display:flex;flex-direction:column;gap:12px;margin:16px 0}
+.gauge-header{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:.85rem}
+.gauge-bar{height:8px;background:#21262d;border-radius:4px;overflow:hidden}
+.gauge-fill{height:100%;border-radius:4px;transition:width .3s}
+.gauge-fill.energy{background:linear-gradient(90deg,#f85149,#d29922,#3fb950)}
+.gauge-fill.time{background:linear-gradient(90deg,#d29922,#58a6ff)}
+.gauge-fill.mood{background:linear-gradient(90deg,#f778ba,#bc8cff,#58a6ff)}
+.gauge-meta{display:flex;justify-content:space-between;font-size:.8rem;color:#8b949e;margin-top:2px}
+.trend{font-size:1rem}
+
+/* Events */
+.events{margin:16px 0}
+.event-list{display:flex;flex-direction:column;gap:8px}
+.event{display:flex;gap:12px;padding:8px;background:#161b22;border-radius:8px;border-left:3px solid #30363d}
+.event-time{font-size:.8rem;color:#8b949e;min-width:40px;padding-top:2px}
+.event-body{flex:1}
+.event-label{font-size:.85rem;margin-bottom:2px}
+.event-tag{color:#58a6ff;margin-right:6px;font-size:.75rem}
+.event-deltas{display:flex;gap:12px;font-size:.75rem;color:#8b949e}
+.delta.energy{color:#d29922}
+.delta.mood{color:#bc8cff}
+.empty{color:#484f58;font-size:.85rem}
+
+/* Recommendation */
+.rec{margin:16px 0;padding:12px;background:#161b22;border-radius:8px;border:1px solid #30363d}
+.rec ul{padding-left:20px;font-size:.85rem;color:#8b949e}
+.rec li{margin-bottom:2px}
+
+footer{margin-top:24px;padding-top:12px;border-top:1px solid #21262d;text-align:center;font-size:.7rem;color:#484f58}

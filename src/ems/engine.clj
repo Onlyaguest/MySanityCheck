@@ -131,7 +131,7 @@
   "Recommend task type based on three-line state."
   [energy available-hrs mood]
   (let [hi-e (>= energy 60) hi-t (> available-hrs 2) hi-m (>= mood 60)]
-    (case [hi-e hi-t hi-m]
+    (condp = [hi-e hi-t hi-m]
       [true  true  true]  {:task-type "高难度创造" :suggestions ["系统架构设计" "深度写作" "战略规划"]}
       [true  true  false] {:task-type "机械性工作" :suggestions ["代码重构" "文档整理" "数据清洗"]}
       [true  false true]  {:task-type "快速冲刺"   :suggestions ["20min 专注任务" "快速决策"]}
@@ -139,7 +139,19 @@
       [false true  true]  {:task-type "学习输入"   :suggestions ["阅读" "听播客" "看视频"]}
       [false true  false] {:task-type "强制休息"   :suggestions ["物理熔断" "停止工作"]}
       [false false true]  {:task-type "轻量娱乐"   :suggestions ["刷推" "看短视频"]}
-      [false false false] {:task-type "紧急干预"   :suggestions ["立即停止所有工作" "寻求支持"]})))
+      [false false false] {:task-type "紧急干预"   :suggestions ["立即停止所有工作" "寻求支持"]}
+      {:task-type "自由安排" :suggestions ["根据当前状态自行选择"]})))
+
+;; --- Mood regression ---
+
+(defn apply-mood-regression
+  "Mood drifts 10% closer to baseline (80) per elapsed hour."
+  [mood now]
+  (let [hrs (hours-since-morning now)
+        baseline 80
+        diff (- baseline mood)
+        regression (* diff (- 1.0 (Math/pow 0.9 hrs)))]
+    (clamp (Math/round (+ mood regression)))))
 
 ;; --- Phase detection ---
 
@@ -180,7 +192,7 @@
         events (or (:events roam-data) [])
         after-events (apply-events {:energy energy-decayed :mood mood :events []} events)
         final-energy (:energy after-events)
-        final-mood   (:mood after-events)
+        final-mood   (apply-mood-regression (:mood after-events) now)
         ;; 4. Time quality
         tq (compute-time-quality screen-time-data (:calendar config) now)
         ;; 5. Alerts

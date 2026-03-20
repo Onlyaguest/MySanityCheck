@@ -120,26 +120,49 @@
 
 ;; --- HTTP API ---
 
-(defn handler [req]
-  (case (:uri req)
-    "/state"
-    (if-let [s @state]
-      {:status 200
-       :headers {"Content-Type" "application/json"
-                 "Access-Control-Allow-Origin" "*"}
-       :body (json/generate-string s)}
-      {:status 503
-       :headers {"Content-Type" "application/json"}
-       :body (json/generate-string {:error "no state yet, first cycle pending"})})
+(def ^:private cors-headers
+  {"Access-Control-Allow-Origin"  "*"
+   "Access-Control-Allow-Methods" "GET, POST, OPTIONS"
+   "Access-Control-Allow-Headers" "Content-Type"})
 
-    "/health"
-    {:status 200
-     :headers {"Content-Type" "application/json"}
-     :body (json/generate-string {:status "ok" :has-state (some? @state)})}
+(defn- json-response [status body]
+  {:status status
+   :headers (merge {"Content-Type" "application/json"} cors-headers)
+   :body (json/generate-string body)})
 
-    {:status 404
-     :headers {"Content-Type" "application/json"}
-     :body (json/generate-string {:error "not found"})}))
+(defn- read-body [req]
+  (some-> (:body req) slurp (json/parse-string true)))
+
+(defn make-handler
+  "Returns handler closed over resolved config (for dashboard-url)."
+  [config]
+  (let [dashboard-url (get-in config [:dashboard :url])]
+    (fn [req]
+      (if (= :options (:request-method req))
+        {:status 204 :headers cors-headers}
+
+        (case (:uri req)
+          "/state"
+          (if-let [s @state]
+            (json-response 200 s)
+            (json-response 503 {:error "no state yet, first cycle pending"}))
+
+          "/discord/interactions"
+          (if (= :post (:request-method req))
+            (let [body (read-body req)
+                  ;; Discord ping (type 1) → pong
+                  ;; Slash command (type 2) → state response
+                  resp (case (:type body)
+                         1 {:type 1}
+                         2 (discord/handle-interaction @state dashboard-url)
+                         {:type 4 :data {:content "Unknown interaction"}})]
+              (json-response 200 resp))
+            (json-response 405 {:error "POST only"}))
+
+          "/health"
+          (json-response 200 {:status "ok" :has-state (some? @state)})
+
+          (json-response 404 {:error "not found"}))))))
 
 ;; --- Entry points ---
 
@@ -156,6 +179,6 @@
     ;; Start scheduler
     (start-scheduler! config)
     ;; Start HTTP server
-    (http/run-server handler {:port port})
+    (http/run-server (make-handler config) {:port port})
     (println (str "✓ EMS running on port " port " [env=" (:active-env config) "]"))
     @(promise)))
