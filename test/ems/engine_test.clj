@@ -63,13 +63,12 @@
       (is (= "2026-03-19" (:date state))))))
 
 (deftest morning-calibration-no-complaint
-  (testing "no complaint → energy 100, mood 80"
+  (testing "no complaint → energy 100, mood 80 + event impacts"
     (let [state (engine/compute-state [] mock-roam {} now)]
-      ;; No screen decay, no events except the two roam events
-      ;; Base energy=100 with no screen time → stays 100 before events
       (is (>= (get-in state [:energy :value]) 0))
-      (is (= 80 (get-in state [:mood :value]))
-          "mood starts at 80 with no complaint and only :sprint/:aha events (net 0 mood)"))))
+      ;; mood starts 80, :aha adds +10 → 90
+      (is (= 90 (get-in state [:mood :value]))
+          "mood starts at 80, :aha event adds +10"))))
 
 (deftest morning-calibration-with-complaint
   (testing "complaint → energy 80, mood 60"
@@ -85,4 +84,6 @@
       (is (= 100 (get-in state [:energy :value])))
       (is (= 80  (get-in state [:mood :value])))
       (is (empty? (:events state)))
-      (is (empty? (:alerts state))))))
+      ;; No screen time → ratio 0.0 → fragmentation alert is expected
+      (is (some #(= :fragmentation (:type %)) (:alerts state))
+          "zero screen time yields 0.0 ratio, triggering fragmentation alert"))))

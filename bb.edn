@@ -11,4 +11,8 @@
          :task (core/init-only!)}
 
   test  {:doc "Run tests"
-         :task (load-file "test/ems/engine_test.clj")}}}
+         :task (do (require 'clojure.test)
+                   (load-file "test/ems/engine_test.clj")
+                   (let [{:keys [fail error]} (clojure.test/run-tests 'ems.engine-test)]
+                     (when (pos? (+ fail error))
+                       (System/exit 1))))}}}

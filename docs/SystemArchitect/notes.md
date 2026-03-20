@@ -207,3 +207,26 @@ FrontendDev proposes server-side hiccup rendering on Vercel. This is a good call
 - DataEngineer: remove pod loading from screentime.clj, add FDA error handling
 - EngineBuilder: consolidate complaint keywords
 - DiscordDev: update discord.clj for multi-env channel selection
+
+---
+
+## F. P1 Decision: Discord Bot API over Webhooks (2026-03-20)
+
+**Decision:** Use Discord Bot API, not webhook URLs.
+
+**Why:**
+- `secrets.edn` already has `bot-token`, `guild-id`, staging/prod channel IDs
+- Webhook URLs would require manual per-channel creation — extra setup step
+- Bot API lets us target env-resolved channel ID programmatically
+- Slash command registration needs bot token anyway — one auth mechanism
+
+**Contract for DiscordDev:**
+- Send messages: `POST https://discord.com/api/v10/channels/{channel-id}/messages`
+- Header: `Authorization: Bot {bot-token}`
+- Body: `{"content": "message text"}`
+- `bot-token` from `(:bot-token (:discord-config config))`
+- `channel-id` from `(:channel (:discord-config config))` (already env-resolved by core.clj)
+- Drop `post-webhook!` / `webhook-url` params entirely
+- Replace with `post-channel!` taking `bot-token`, `channel-id`, `content`
+
+**Impact on core.clj:** Update `run-cycle!` and scheduler to pass `discord-config` instead of `webhook-url` to discord functions. Minor change — will do when DiscordDev updates discord.clj interface.

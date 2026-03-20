@@ -59,16 +59,15 @@
   "Run one collect→compute→cache cycle."
   [config]
   (let [since     (- (quot (System/currentTimeMillis) 1000) 86400)
+        dc        (:discord-config config)
         st-data   (try (st/collect {:since since}) (catch Exception _ []))
         roam-cfg  (assoc (:roam-config config) :date (today-str))
         roam-data (try (roam/collect roam-cfg) (catch Exception _ {}))
         now       (now-iso)
         snapshot  (engine/compute-state st-data roam-data config now)]
     (reset! state snapshot)
-    ;; Fire alerts to Discord
-    (when-let [webhook (get-in config [:discord :webhook-url])]
-      (doseq [alert (:alerts snapshot)]
-        (try (discord/send-alert! webhook alert) (catch Exception _))))
+    (doseq [alert (:alerts snapshot)]
+      (try (discord/send-alert! dc alert) (catch Exception _)))
     snapshot))
 
 ;; --- Scheduler ---
@@ -84,6 +83,7 @@
   [config]
   (let [st-interval-ms  (* (get-in config [:intervals :screentime] 30) 60 1000)
         roam-interval-ms (* (get-in config [:intervals :roam] 60) 60 1000)
+        dc               (:discord-config config)
         morning-sent     (atom false)
         evening-sent     (atom false)]
     (future
@@ -103,14 +103,12 @@
           ;; Morning calibration summary (08:00-08:05)
           (when (and (= h 8) (not @morning-sent))
             (when-let [s @state]
-              (when-let [webhook (get-in config [:discord :webhook-url])]
-                (try (discord/send-summary! webhook s :morning) (catch Exception _))))
+              (try (discord/send-summary! dc s :morning) (catch Exception _)))
             (reset! morning-sent true))
           ;; Evening review summary (21:00-21:05)
           (when (and (= h 21) (not @evening-sent))
             (when-let [s @state]
-              (when-let [webhook (get-in config [:discord :webhook-url])]
-                (try (discord/send-summary! webhook s :evening) (catch Exception _))))
+              (try (discord/send-summary! dc s :evening) (catch Exception _)))
             (reset! evening-sent true))
           ;; Reset daily flags at midnight
           (when (= h 0)
