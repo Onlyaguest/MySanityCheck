@@ -158,17 +158,17 @@
 ;; --- Entry points ---
 
 (defn- detect-terminal-bin
-  "Detect the terminal binary path for FDA instructions."
+  "Detect the real terminal binary path (resolves symlinks for FDA)."
   []
-  (or (try
-        (let [ppid (System/getenv "PPID")
-              proc (-> (Runtime/getRuntime)
-                       (.exec (into-array ["ps" "-o" "comm=" "-p" ppid])))]
-          (.waitFor proc)
-          (some-> proc .getInputStream slurp clojure.string/trim not-empty))
-        (catch Exception _ nil))
-      (System/getenv "TERM_PROGRAM")
-      "your terminal app"))
+  (let [name (or (System/getenv "TERM_PROGRAM") "your terminal app")
+        candidates [(str "/opt/homebrew/bin/" name)
+                    (str "/usr/local/bin/" name)
+                    (str "/usr/bin/" name)]
+        found (first (filter #(.exists (java.io.File. %)) candidates))]
+    (if found
+      (try (str (.toRealPath (.toPath (java.io.File. found)) (into-array java.nio.file.LinkOption [])))
+           (catch Exception _ found))
+      name)))
 
 (defn- check-screentime []
   (let [db-path (str (System/getProperty "user.home")
@@ -180,21 +180,19 @@
           ["SELECT COUNT(*) as c FROM ZOBJECT WHERE ZSTREAMNAME = '/app/usage' LIMIT 1"])
         {:ok true :msg "Screen Time access OK"}
         (catch Exception e
-          (let [msg (.getMessage e)
-                term (detect-terminal-bin)]
-            (if (or (clojure.string/includes? (str msg) "not permitted")
-                    (clojure.string/includes? (str msg) "authorization denied"))
-              (do
-                (when term
-                  (try (.exec (Runtime/getRuntime) (into-array ["open" "-R" term]))
-                       (catch Exception _)))
-                {:ok false
-                 :msg (str "Screen Time access denied. Grant Full Disk Access to: " term)
-                 :instructions
+          (let [msg (str e)
+                term (detect-terminal-bin)
+                fda? (or (clojure.string/includes? msg "not permitted")
+                         (clojure.string/includes? msg "authorization denied"))]
+            (if fda?
+              {:ok false
+               :msg (str "Screen Time access denied. Grant Full Disk Access to: " term)
+               :instructions
                [(str "1. Open System Settings → Privacy & Security → Full Disk Access")
-                (str "2. Finder opened — drag the highlighted binary into FDA")
-                (str "3. Restart your terminal and run: bb init")]}
-              {:ok false :msg (str "Screen Time read error: " msg)}))))))))
+                (str "2. Add: " term)
+                (str "3. Restart your terminal and run: bb init")]
+               :open-finder term}
+              {:ok false :msg (str "Screen Time read error: " msg)})))))))
 
 (defn- check-roam [config]
   (let [{:keys [token graph]} (:roam-config config)]
@@ -235,13 +233,17 @@
       (println (str (if (:ok result) "✅" "❌") " " name ": " (:msg result)))
       (doseq [line (:instructions result)]
         (println (str "   " line))))
-    ;; Try to open FDA settings if Screen Time failed
+    ;; Try to open FDA settings + Finder if Screen Time failed
     (when-let [st (some #(when (= "Screen Time" (:name %)) (:result %)) checks)]
       (when (and (not (:ok st)) (:instructions st))
+        (when-let [term (:open-finder st)]
+          (try (.exec (Runtime/getRuntime) (into-array ["open" "-R" term]))
+               (println (str "\n📂 Finder opened at: " term))
+               (catch Exception _)))
         (try
           (.exec (Runtime/getRuntime)
                  (into-array ["open" "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"]))
-          (println "\n📎 Opened System Settings → Full Disk Access")
+          (println "📎 Opened System Settings → Full Disk Access")
           (catch Exception _))))
     (println "\n━━━━━━━━━━━━━━━━")
     (let [ok-count (count (filter #(:ok (:result %)) checks))
