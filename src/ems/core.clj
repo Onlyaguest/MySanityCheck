@@ -186,12 +186,12 @@
                          (clojure.string/includes? msg "authorization denied"))]
             (if fda?
               {:ok false
-               :msg (str "Screen Time access denied. Grant Full Disk Access to: " term)
+               :msg "Screen Time access denied. Grant Full Disk Access to the SQLite pod."
                :instructions
                [(str "1. Open System Settings → Privacy & Security → Full Disk Access")
-                (str "2. Add: " term)
-                (str "3. Restart your terminal and run: bb init")]
-               :open-finder term}
+                (str "2. Add: " (str (System/getProperty "user.home") "/.babashka/pods/repository/org.babashka/go-sqlite3/0.3.13/mac_os_x/aarch64/pod-babashka-go-sqlite3"))
+                (str "3. Run: bb init")]
+               :open-finder (str (System/getProperty "user.home") "/.babashka/pods/repository/org.babashka/go-sqlite3/0.3.13/mac_os_x/aarch64/pod-babashka-go-sqlite3")}
               {:ok false :msg (str "Screen Time read error: " msg)})))))))
 
 (defn- check-roam [config]
