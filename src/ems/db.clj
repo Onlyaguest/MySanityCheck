@@ -1,8 +1,5 @@
 (ns ems.db
-  (:require [babashka.pods :as pods]))
-
-(pods/load-pod 'org.babashka/go-sqlite3 "0.3.1")
-(require '[pod.babashka.go-sqlite3 :as sqlite])
+  (:require [pod.babashka.go-sqlite3 :as sqlite]))
 
 (def db-path "ems.db")
 

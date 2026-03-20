@@ -329,3 +329,17 @@ Keeping it minimal — one main namespace with rates and complaint as small help
 ### From QAEngineer
 - **Confirmed:** Clock injection via `now` parameter on all time-dependent functions. Deterministic keyword matching for complaint detection (no LLM). All functions are pure — pass maps in, assert maps out.
 - **Request:** Sample day scenario EDN fixtures would help me validate. Happy to co-define the expected outputs.
+
+---
+
+## Phase 2 — P0 Fixes (2026-03-20)
+
+### Done
+
+1. **Complaint keywords consolidated.** `src/ems/engine/complaint.clj` is the single source of truth (13 keywords). Removed duplicate `:complaint-keywords` set from `config.edn` (had 9 keywords — subset, now gone). DataEngineer already updated `roam.clj` to import `ems.engine.complaint/complaint?` — verified, no duplicates remain.
+
+2. **Output shape verified.** Engine output matches what DiscordDev's `format-state` expects (`:energy :value`, `:energy :emoji`, `:mood :value`, `:mood :status`, `:time-quality :available-hours`, `:time-quality :emoji`, `:recommendation :task-type`). FrontendDev confirmed they will adapt to engine's flat shape (no `:current` wrapper needed). No engine changes required.
+
+### Not changed (not my P0)
+- `recommend-task` `case` on vector + missing default — CodeReviewer flagged as P1. Will add `:else` default in next pass.
+- Mood regression — P1, spec says mood drifts toward baseline but not implemented yet.

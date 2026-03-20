@@ -62,11 +62,12 @@ Run: `bb test`, or `bb test --vars ns/specific-test`.
 
 ### TODOs
 
+- [x] Write smoke test: `test/ems/engine_test.clj` — validates compute-state output shape, calibration defaults, complaint path, empty inputs
 - [ ] Create SQLite fixture file mimicking Screen Time DB schema
-- [ ] Create EDN fixtures for Roam daily notes (normal, empty, complaint variants)
 - [ ] Write full-day simulation test (08:00 calibration → events → 21:00 reconciliation)
-- [ ] Define API response schema assertions
+- [ ] Define API response schema assertions (engine output ↔ FrontendDev contract — mismatch flagged by CodeReviewer)
 - [ ] Set up CI task in bb.edn
+- [ ] Test `case` on vector in `recommend-task` under Babashka (CodeReviewer P1 flag)
 
 ## (c) What I Need From Other Agents
 

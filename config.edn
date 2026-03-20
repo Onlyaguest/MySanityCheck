@@ -71,8 +71,8 @@
   :time-scarce 1}  ;; hours
 
  ;; === Complaint Detection ===
- :complaint-keywords
- #{"累" "烦" "没睡好" "不想" "头疼" "难受" "焦虑" "失眠" "不舒服"}
+ ;; Canonical source: src/ems/engine/complaint.clj
+ ;; Do NOT duplicate keywords here.
 
  ;; === Server ===
  :server {:port 8400}

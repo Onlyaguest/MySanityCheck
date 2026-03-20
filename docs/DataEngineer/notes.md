@@ -130,13 +130,28 @@ All collectors write EDN (not JSON — idiomatic Clojure) to a shared local data
 4. **EDN vs JSON for internal data format?** I propose EDN (native Clojure). If other agents need JSON, we can add a thin conversion layer.
 
 ### TODOs
-- [ ] Write `ems.collector.screentime` namespace — query knowledgeC.db, bucket by hour
-- [ ] Write `ems.collector.roam` namespace — poll Roam API, parse tags
-- [ ] Write `ems.collector.roam-parser` — complaint detection, numeric extraction
+- [x] Write `ems.collector.screentime` namespace — query knowledgeC.db, bucket by hour
+- [x] Write `ems.collector.roam` namespace — poll Roam API, parse tags
+- [x] Write `ems.collector.roam-parser` — complaint detection, numeric extraction (inline in roam.clj)
 - [ ] Create launchd plist template for scheduling
 - [ ] Config file (EDN) for: db path, Roam graph name, API token, polling interval
 - [ ] Integration test: read real knowledgeC.db on this Mac, verify output shape
 - [ ] Document FDA setup steps for user
+
+---
+
+## Phase 2 P0 Fixes — Completed 2026-03-20
+
+### screentime.clj changes:
+1. **Removed pod loading** — no more `(pods/load-pod ...)` in this file. Requires caller (core.clj) to load `org.babashka/go-sqlite3 "0.3.13"` once before requiring this ns. Now just `(:require [pod.babashka.go-sqlite3 :as sqlite])`.
+2. **Added FDA error handling** — new `db-accessible?` fn does a probe query wrapped in try/catch. If knowledgeC.db is missing or permission denied, `collect` prints a warning and returns `[]` instead of crashing.
+3. Removed unused `cd->unix` fn.
+
+### roam.clj changes:
+1. **Removed duplicate complaint keywords** — deleted local `complaint-keywords` set and `complaint?` fn. Now requires `ems.engine.complaint` and calls `complaint/complaint?` (single source of truth per EngineBuilder).
+2. **Events now a vec** — `(vec (concat ...))` instead of lazy `(concat ...)` for consistency.
+3. Renamed `block->time` destructuring from `{:keys [create/time]}` to `{ct :create/time}` to avoid shadowing `clojure.core/time`.
+4. Config contract unchanged: caller passes `{:graph "x" :token "y" :date "YYYY-MM-DD"}` — token+graph come from resolved secrets in core.clj.
 
 ---
 

@@ -1,25 +1,38 @@
 (ns ems.discord
-  "Discord integration: alerts, slash commands, summaries."
+  "Discord integration: alerts, slash commands, summaries.
+   All fns that POST to Discord take a resolved channel webhook URL."
   (:require [babashka.http-client :as http]
             [cheshire.core :as json]))
 
+(defn resolve-channel
+  "Given secrets map, return the active channel ID based on :env."
+  [secrets]
+  (let [env (get secrets :env :staging)]
+    (get-in secrets [:discord (if (= env :prod) :prod-channel :staging-channel)])))
+
 (defn- post-webhook!
-  "POST JSON to Discord webhook URL."
+  "POST JSON to Discord webhook URL. Returns nil on error (logs to stderr)."
   [webhook-url content]
-  (http/post webhook-url
-             {:headers {"Content-Type" "application/json"}
-              :body (json/generate-string {:content content})}))
+  (try
+    (http/post webhook-url
+               {:headers {"Content-Type" "application/json"}
+                :body (json/generate-string {:content content})})
+    (catch Exception e
+      (binding [*out* *err*]
+        (println "discord: webhook POST failed:" (.getMessage e)))
+      nil)))
 
 (defn format-state
   "Format engine state as Discord message string."
   [{:keys [energy mood time-quality recommendation]}]
   (str "⚡ Energy: " (:value energy) " " (:emoji energy)
-       "  |  ⏱ Time: " (format "%.1f" (:available-hours time-quality)) "h " (:emoji time-quality)
+       "  |  ⏱ Time: " (format "%.1f" (double (or (:available-hours time-quality) 0)))
+       "h " (:emoji time-quality)
        "  |  " (:emoji mood) " Mood: " (:value mood) " " (:status mood)
        "\n💡 推荐: " (:task-type recommendation)))
 
 (defn send-alert!
-  "Send alert to Discord webhook. Returns response."
+  "Send alert to Discord webhook. Returns response or nil on error."
   [webhook-url alert]
   (post-webhook! webhook-url (:message alert)))
 
@@ -29,7 +42,7 @@
   (let [msg (str (format-state state)
                  (when dashboard-url
                    (str "\n📊 Dashboard: " dashboard-url "/" (:date state))))]
-    {:type 4  ;; CHANNEL_MESSAGE_WITH_SOURCE
+    {:type 4
      :data {:content msg}}))
 
 (defn send-summary!

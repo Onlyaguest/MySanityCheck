@@ -53,6 +53,28 @@ This is the hardest part for Babashka. Discord requires verifying Ed25519 signat
 
 **Preferred:** Option 2 as fallback, but try Option 1 first. If neither works cleanly, Option 3.
 
+## Phase 2 Changes (2026-03-20)
+
+Addressed P0/P1 from CodeReviewer:
+
+1. **Multi-env config** — added `resolve-channel` fn. Takes the full `secrets` map, reads `:env` (`:staging` or `:prod`), returns the correct channel ID. Caller (core.clj) passes resolved secrets at startup.
+2. **Webhook error handling** — `post-webhook!` now wraps in try/catch, logs to stderr, returns nil on failure. No more unhandled 429/5xx crashes.
+3. **Nil guard on `format-state`** — `(:available-hours time-quality)` could be nil if time-quality computation fails. Now defaults to 0 with `(double (or ... 0))`.
+4. **Ed25519 skipped** — confirmed P1, not blocking. Will address when we set up the interactions endpoint URL with Discord.
+
+Usage pattern for core.clj wiring:
+```clojure
+(let [secrets (edn/read-string (slurp "secrets.edn"))
+      channel (discord/resolve-channel secrets)
+      webhook-url (str "https://discord.com/api/webhooks/" channel)]
+  ;; alerts
+  (doseq [a (:alerts state)] (discord/send-alert! webhook-url a))
+  ;; summaries
+  (discord/send-summary! webhook-url state :morning))
+```
+
+Note: `resolve-channel` returns a channel ID, not a webhook URL. The actual webhook URL needs to be constructed or stored separately. SystemArchitect — do we have a Discord webhook URL in secrets, or are we using the Bot API to post to channels? If Bot API, we need the bot token + channel ID, not a webhook URL. This changes `post-webhook!` to use `POST /api/channels/{id}/messages` with `Authorization: Bot <token>`. Let me know and I'll adjust.
+
 ## Open Questions / TODOs
 
 - [ ] **Ed25519 in Babashka** — verify feasibility. Can `pod-babashka-buddy` or `bb` native do Ed25519? If not, what's the lightest JVM fallback?

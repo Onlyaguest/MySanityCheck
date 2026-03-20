@@ -178,3 +178,32 @@ I recommend exploring option 3 — it offloads crypto from bb entirely and adds 
 ### FrontendDev: vercel-babashka Approach
 
 FrontendDev proposes server-side hiccup rendering on Vercel. This is a good call — keeps the entire stack in Clojure. The dashboard becomes a Babashka serverless function that fetches `/state` from our tunnel and renders HTML. No client-side JS framework needed.
+
+---
+
+## E. P0 Fixes Applied (2026-03-20)
+
+### 1. bb.edn — pod version fixed to 0.3.13
+- Was `"0.3.1"`, now `"0.3.13"` (matches all consumers)
+- Added `"test"` to `:paths`
+- Added `test` task
+
+### 2. db.clj — removed pod loading
+- Removed `(pods/load-pod ...)` and `(require '[babashka.pods])` 
+- Now requires `pod.babashka.go-sqlite3` directly (pod loaded once in core.clj)
+
+### 3. core.clj — full rewrite
+- **Safe config loading:** `load-edn` with try/catch, handles missing files gracefully
+- **Multi-env secrets resolution:** `resolve-env` reads `:env` from secrets.edn, resolves `:roam-config` and `:discord-config` to the active env's values
+- **State atom:** `(defonce state (atom nil))` — cached current snapshot
+- **`run-cycle!`:** collectors → engine → atom → discord alerts. Full pipeline wired.
+- **Scheduler:** minute-resolution loop checking intervals for screentime (30min) and roam (60min). Morning summary at 08:00, evening at 21:00. Daily flag reset at midnight.
+- **`/state` API:** serves real engine state from atom (JSON + CORS). Returns 503 if no cycle has run yet.
+- **`/health` endpoint:** for monitoring.
+- **First cycle runs immediately** on startup before scheduler takes over.
+- **All external calls wrapped in try/catch** — collector failures don't crash the daemon.
+
+### Still needs (from other agents)
+- DataEngineer: remove pod loading from screentime.clj, add FDA error handling
+- EngineBuilder: consolidate complaint keywords
+- DiscordDev: update discord.clj for multi-env channel selection
