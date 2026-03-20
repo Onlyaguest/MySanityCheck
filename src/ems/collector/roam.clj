@@ -9,13 +9,13 @@
 ;; --- API layer ---
 
 (defn- roam-post
-  "POST to Roam Backend API. Returns parsed JSON body or nil on failure."
+  "POST to Roam Backend API. Uses X-Authorization header (Roam's auth scheme)."
   [{:keys [graph token]} endpoint body]
   (try
     (let [url  (str "https://api.roamresearch.com/api/graph/" graph endpoint)
           resp (http/post url
-                 {:headers {"Authorization" (str "Bearer " token)
-                            "Content-Type"  "application/json"}
+                 {:headers {"X-Authorization" (str "Bearer " token)
+                            "Content-Type"    "application/json"}
                   :body    (json/generate-string body)
                   :throw   false})]
       (when (= 200 (:status resp))
