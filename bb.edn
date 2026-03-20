@@ -10,19 +10,25 @@
   init      {:doc "Initialize and check all dependencies"
              :task (core/init-only!)}
 
-  install   {:doc "Install launchd daemon (auto-start on login)"
+  install   {:doc "Install launchd daemon via Terminal.app (for FDA)"
              :task (let [src "com.ems.daemon.plist"
                          dst (str (System/getProperty "user.home")
                                   "/Library/LaunchAgents/com.ems.daemon.plist")]
                      (babashka.fs/copy src dst {:replace-existing true})
-                     (babashka.process/shell "launchctl" "load" dst)
-                     (println (str "✓ Installed and loaded: " dst))
-                     (println "  Logs: /tmp/ems-daemon.log"))}
+                     (babashka.process/shell
+                       "osascript" "-e"
+                       (str "tell application \"Terminal\" to do script "
+                            "\"launchctl load " dst " && echo '✓ EMS daemon loaded'\""))
+                     (println (str "✓ Plist copied to: " dst))
+                     (println "✓ Terminal.app opened to load daemon (inherits FDA)")
+                     (println "  Logs: /tmp/ems-daemon.log")
+                     (println "  Stop: bb uninstall"))}
 
   uninstall {:doc "Uninstall launchd daemon"
              :task (let [dst (str (System/getProperty "user.home")
                                   "/Library/LaunchAgents/com.ems.daemon.plist")]
-                     (babashka.process/shell "launchctl" "unload" dst)
+                     (try (babashka.process/shell "launchctl" "unload" dst)
+                          (catch Exception _))
                      (babashka.fs/delete-if-exists dst)
                      (println (str "✓ Unloaded and removed: " dst)))}
 

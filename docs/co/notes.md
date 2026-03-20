@@ -37,11 +37,13 @@ This avoids tmux restart while still getting FDA access for Screen Time.
 | CodeReviewer | review docs | ✅ P0s resolved |
 
 ### Open Items
-- [ ] Ed25519 signature verification for Discord interactions
-- [ ] Vercel dashboard deploy
-- [ ] launchd plist for auto-start
-- [ ] DiscordDev: handle-interaction arity mismatch in core.clj
-- [ ] Cloud relay decision for Vercel → engine data
+- [x] Ed25519 signature verification for Discord interactions
+- [x] launchd plist for auto-start
+- [x] DiscordDev: handle-interaction arity mismatch in core.clj (was fine)
+- [ ] Vercel dashboard deploy (code ready, needs `vercel deploy`)
+- [ ] Cloudflare Tunnel setup (expose /state to internet)
+- [ ] Wire Ed25519 public key from secrets.edn → core.clj → discord.clj
+- [ ] Cloud relay decision for Vercel → engine data (CF Tunnel chosen)
 - [ ] Dashboard auth token scheme
 - [ ] Calendar data integration
 - [ ] Sleep data integration

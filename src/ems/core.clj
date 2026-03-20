@@ -252,16 +252,44 @@
       (when (< ok-count total)
         (println "Fix the issues above, then run: bb init")))))
 
+(defn- kill-port! [port]
+  (try
+    (let [proc (-> (Runtime/getRuntime)
+                   (.exec (into-array ["/bin/sh" "-c"
+                                       (str "/usr/sbin/lsof -ti :" port " | xargs kill 2>/dev/null")])))]
+      (.waitFor proc)
+      (Thread/sleep 500)
+      true)
+    (catch Exception _ false)))
+
+(defn- start-server! [config port]
+  (try
+    (http/run-server (make-handler config) {:port port})
+    (catch Exception e
+      (if (or (instance? java.net.BindException e)
+              (instance? java.net.BindException (.getCause e))
+              (clojure.string/includes? (str e) "Address already in use"))
+        (do (println (str "⚠️  Port " port " in use — killing old process..."))
+            (kill-port! port)
+            (Thread/sleep 1000)
+            (try
+              (http/run-server (make-handler config) {:port port})
+              (println "✓ Reclaimed port")
+              (catch Exception _
+                (println (str "❌ Could not free port. Run: kill $(/usr/sbin/lsof -ti :" port ")"))
+                (System/exit 1))))
+        (throw e)))))
+
 (defn start! []
   (let [config (resolve-env (load-config))
         port   (get-in config [:server :port] 8400)]
     (db/init!)
-    ;; Run first cycle immediately
+    ;; Start HTTP server FIRST (fail fast if port taken)
+    (start-server! config port)
+    (println (str "✓ EMS running on port " port " [env=" (:active-env config) "]"))
+    ;; Run first cycle
     (try (run-cycle! config)
          (catch Exception e (println "⚠️  Initial cycle failed:" (.getMessage e))))
     ;; Start scheduler
     (start-scheduler! config)
-    ;; Start HTTP server
-    (http/run-server (make-handler config) {:port port})
-    (println (str "✓ EMS running on port " port " [env=" (:active-env config) "]"))
     @(promise)))
