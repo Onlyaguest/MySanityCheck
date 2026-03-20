@@ -157,17 +157,17 @@
 
 ;; --- Entry points ---
 
-(defn- detect-terminal-app
-  "Detect the terminal app running this process for FDA instructions."
+(defn- detect-terminal-bin
+  "Detect the terminal binary path for FDA instructions."
   []
-  (or (System/getenv "TERM_PROGRAM")
-      (try
+  (or (try
         (let [ppid (System/getenv "PPID")
               proc (-> (Runtime/getRuntime)
                        (.exec (into-array ["ps" "-o" "comm=" "-p" ppid])))]
           (.waitFor proc)
           (some-> proc .getInputStream slurp clojure.string/trim not-empty))
         (catch Exception _ nil))
+      (System/getenv "TERM_PROGRAM")
       "your terminal app"))
 
 (defn- check-screentime []
@@ -181,16 +181,20 @@
         {:ok true :msg "Screen Time access OK"}
         (catch Exception e
           (let [msg (.getMessage e)
-                term (detect-terminal-app)]
+                term (detect-terminal-bin)]
             (if (or (clojure.string/includes? (str msg) "not permitted")
                     (clojure.string/includes? (str msg) "authorization denied"))
-              {:ok false
-               :msg (str "Screen Time access denied. Grant Full Disk Access to: " term)
-               :instructions
+              (do
+                (when term
+                  (try (.exec (Runtime/getRuntime) (into-array ["open" "-R" term]))
+                       (catch Exception _)))
+                {:ok false
+                 :msg (str "Screen Time access denied. Grant Full Disk Access to: " term)
+                 :instructions
                [(str "1. Open System Settings → Privacy & Security → Full Disk Access")
-                (str "2. Click + and add: " term)
+                (str "2. Finder opened — drag the highlighted binary into FDA")
                 (str "3. Restart your terminal and run: bb init")]}
-              {:ok false :msg (str "Screen Time read error: " msg)})))))))
+              {:ok false :msg (str "Screen Time read error: " msg)}))))))))
 
 (defn- check-roam [config]
   (let [{:keys [token graph]} (:roam-config config)]
