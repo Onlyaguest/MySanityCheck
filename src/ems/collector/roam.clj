@@ -6,10 +6,26 @@
             [clojure.string :as str]
             [ems.engine.complaint :as complaint]))
 
+;; --- Roam key normalization ---
+;; Roam API returns JSON keys like ":block/string", ":create/time" (colon-prefixed).
+;; Cheshire keywordizes these to keywords with ns ":block" which don't match :block/string.
+;; We parse without keywordize and normalize keys ourselves.
+
+(defn- normalize-key
+  "Convert Roam JSON key \":block/string\" → :block/string"
+  [k]
+  (keyword (if (str/starts-with? k ":") (subs k 1) k)))
+
+(defn- normalize-block
+  "Normalize a Roam block map's keys."
+  [m]
+  (when m
+    (into {} (map (fn [[k v]] [(normalize-key k) v]) m))))
+
 ;; --- API layer ---
 
 (defn- roam-post
-  "POST to Roam Backend API. Uses X-Authorization header (Roam's auth scheme)."
+  "POST to Roam Backend API. Uses X-Authorization header."
   [{:keys [graph token]} endpoint body]
   (try
     (let [url  (str "https://api.roamresearch.com/api/graph/" graph endpoint)
@@ -19,13 +35,14 @@
                   :body    (json/generate-string body)
                   :throw   false})]
       (when (= 200 (:status resp))
-        (json/parse-string (:body resp) true)))
+        (json/parse-string (:body resp) false)))
     (catch Exception _e nil)))
 
 (defn- q [config query & args]
-  (roam-post config "/q"
-    (cond-> {:query query}
-      (seq args) (assoc :args (vec args)))))
+  (let [result (roam-post config "/q"
+                 (cond-> {:query query}
+                   (seq args) (assoc :args (vec args))))]
+    (get result "result")))
 
 ;; --- Date formatting ---
 
@@ -49,18 +66,19 @@
   (when-let [m (re-find #"\d+" (or s ""))]
     (parse-long m)))
 
-(defn- block->time [{ct :create/time}]
-  (when ct (str (java.time.Instant/ofEpochMilli ct))))
+(defn- block-time [block]
+  (when-let [ct (:create/time block)]
+    (str (java.time.Instant/ofEpochMilli ct))))
 
 (defn- parse-tagged-blocks [blocks]
   (mapv (fn [b]
           (let [s (:block/string b)]
-            {:time (block->time b) :value (extract-number s) :text s}))
+            {:time (block-time b) :value (extract-number s) :text s}))
         blocks))
 
 (defn- parse-events [tag-type blocks]
   (mapv (fn [b]
-          {:time (block->time b) :type tag-type :context (or (:block/string b) "")})
+          {:time (block-time b) :type tag-type :context (or (:block/string b) "")})
         blocks))
 
 ;; --- Queries ---
@@ -75,8 +93,11 @@
     :in $ ?tag
     :where [?ref :node/title ?tag] [?b :block/refs ?ref]]")
 
-(defn- query-tagged [config tag]
-  (mapv first (or (q config tagged-blocks-q tag) [])))
+(defn- query-blocks
+  "Run a query and normalize all returned block maps."
+  [config query & args]
+  (let [rows (apply q config query args)]
+    (mapv (comp normalize-block first) (or rows []))))
 
 ;; --- Public API ---
 
@@ -86,7 +107,7 @@
    Returns EDN map. Nil-safe on API failure."
   [{:keys [date] :as config}]
   (let [title        (roam-date-title date)
-        daily-blocks (mapv first (or (q config daily-blocks-q title) []))
+        daily-blocks (query-blocks config daily-blocks-q title)
         morning-text (->> daily-blocks
                           (filter #(some-> (:block/string %) (str/includes? "早安")))
                           first :block/string)]
@@ -94,9 +115,9 @@
      :date               date
      :morning-complaint? (complaint/complaint? morning-text)
      :morning-text       morning-text
-     :energy-tags        (parse-tagged-blocks (query-tagged config "Energy"))
-     :mood-tags          (parse-tagged-blocks (query-tagged config "Mood"))
-     :events             (vec (concat (parse-events :aha (query-tagged config "Aha"))
-                                      (parse-events :friction (query-tagged config "Friction"))
-                                      (parse-events :sprint (query-tagged config "Sprint"))))
-     :raw-buffer         (mapv :block/string (query-tagged config "status/raw"))}))
+     :energy-tags        (parse-tagged-blocks (query-blocks config tagged-blocks-q "Energy"))
+     :mood-tags          (parse-tagged-blocks (query-blocks config tagged-blocks-q "Mood"))
+     :events             (vec (concat (parse-events :aha (query-blocks config tagged-blocks-q "Aha"))
+                                      (parse-events :friction (query-blocks config tagged-blocks-q "Friction"))
+                                      (parse-events :sprint (query-blocks config tagged-blocks-q "Sprint"))))
+     :raw-buffer         (mapv :block/string (query-blocks config tagged-blocks-q "status/raw"))}))

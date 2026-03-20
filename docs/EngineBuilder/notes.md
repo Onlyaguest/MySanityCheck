@@ -343,3 +343,14 @@ Keeping it minimal — one main namespace with rates and complaint as small help
 ### Not changed (not my P0)
 - `recommend-task` `case` on vector + missing default — CodeReviewer flagged as P1. Will add `:else` default in next pass.
 - Mood regression — P1, spec says mood drifts toward baseline but not implemented yet.
+
+### Morning-text contract (2026-03-20)
+
+Engine expects `roam-data` to contain `:morning-text` as a top-level string key — the raw text of the user's morning Roam block (the one containing "早安"). This is passed directly to `complaint/complaint?` in `calibrate-morning`.
+
+- Key: `:morning-text` (top-level in roam-data map)
+- Type: `String` or `nil`
+- If `nil` or blank → no complaint detected → defaults apply (Energy=100, Mood=80)
+- Engine does NOT use `:morning-complaint?` boolean from roam collector — it runs its own `complaint?` on the raw text for richer keyword matching (13 keywords vs collector's pre-computed boolean)
+
+No engine-side fix needed. DataEngineer is fixing roam.clj's block filtering that returned nil.
