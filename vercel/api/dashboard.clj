@@ -7,12 +7,15 @@
 ;; --- Data fetching ---
 
 (defn fetch-state [date]
-  (let [url (or (System/getenv "EMS_API_URL") "http://localhost:8090")
-        resp (http/get (str url "/state")
-                       {:query-params (when date {"date" date})
-                        :throw false})]
-    (when (= 200 (:status resp))
-      (json/parse-string (:body resp) true))))
+  (try
+    (let [url (or (System/getenv "EMS_API_URL") "http://localhost:8090")
+          resp (http/get (str url "/state")
+                         {:query-params (when date {"date" date})
+                          :timeout 5000
+                          :throw false})]
+      (when (= 200 (:status resp))
+        (json/parse-string (:body resp) true)))
+    (catch Exception _ nil)))
 
 (defn demo-state []
   {:date "2026-03-20" :timestamp "2026-03-20T10:30:00+08:00"
@@ -109,6 +112,8 @@
       [:header
        [:h1 (str "EMS — " (:date state))]
        [:span.phase (str "Phase: " (name (or (keyword (:phase state)) :unknown)))]]
+      (when (:offline state)
+        [:div.alert.warn "⚠ Offline — showing demo data"])
       (render-alerts (:alerts state))
       (render-gauges state)
       (render-events (:events state))
@@ -119,8 +124,8 @@
 
 (defn handler [{:keys [query-params]}]
   (let [date (get query-params "date")
-        state (or (try (fetch-state date) (catch Exception _ nil))
-                  (demo-state))]
+        live (fetch-state date)
+        state (or live (assoc (demo-state) :offline true))]
     {:status 200
      :headers {"content-type" "text/html; charset=utf-8"}
      :body (render-page state)}))

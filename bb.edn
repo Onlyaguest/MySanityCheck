@@ -4,15 +4,32 @@
  :tasks
  {:requires ([ems.core :as core])
 
-  run   {:doc "Start EMS daemon"
-         :task (core/start!)}
+  run       {:doc "Start EMS daemon"
+             :task (core/start!)}
 
-  init  {:doc "Initialize database"
-         :task (core/init-only!)}
+  init      {:doc "Initialize and check all dependencies"
+             :task (core/init-only!)}
 
-  test  {:doc "Run tests"
-         :task (do (require 'clojure.test)
-                   (load-file "test/ems/engine_test.clj")
-                   (let [{:keys [fail error]} (clojure.test/run-tests 'ems.engine-test)]
-                     (when (pos? (+ fail error))
-                       (System/exit 1))))}}}
+  install   {:doc "Install launchd daemon (auto-start on login)"
+             :task (let [src "com.ems.daemon.plist"
+                         dst (str (System/getProperty "user.home")
+                                  "/Library/LaunchAgents/com.ems.daemon.plist")]
+                     (babashka.fs/copy src dst {:replace-existing true})
+                     (babashka.process/shell "launchctl" "load" dst)
+                     (println (str "✓ Installed and loaded: " dst))
+                     (println "  Logs: /tmp/ems-daemon.log"))}
+
+  uninstall {:doc "Uninstall launchd daemon"
+             :task (let [dst (str (System/getProperty "user.home")
+                                  "/Library/LaunchAgents/com.ems.daemon.plist")]
+                     (babashka.process/shell "launchctl" "unload" dst)
+                     (babashka.fs/delete-if-exists dst)
+                     (println (str "✓ Unloaded and removed: " dst)))}
+
+  test      {:doc "Run tests"
+             :task (do (require 'clojure.test)
+                       (load-file "test/ems/engine_test.clj")
+                       (load-file "test/ems/integration_test.clj")
+                       (let [{:keys [fail error]} (clojure.test/run-tests 'ems.engine-test 'ems.integration-test)]
+                         (when (pos? (+ fail error))
+                           (System/exit 1))))}}}
