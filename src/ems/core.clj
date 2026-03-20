@@ -1,5 +1,6 @@
 (ns ems.core
   (:require [babashka.pods :as pods]
+            [babashka.http-client]
             [org.httpkit.server :as http]
             [cheshire.core :as json]))
 
@@ -130,9 +131,6 @@
    :headers (merge {"Content-Type" "application/json"} cors-headers)
    :body (json/generate-string body)})
 
-(defn- read-body [req]
-  (some-> (:body req) slurp (json/parse-string true)))
-
 (defn make-handler
   "Returns handler closed over resolved config (for dashboard-url)."
   [config]
@@ -149,14 +147,7 @@
 
           "/discord/interactions"
           (if (= :post (:request-method req))
-            (let [body (read-body req)
-                  ;; Discord ping (type 1) → pong
-                  ;; Slash command (type 2) → state response
-                  resp (case (:type body)
-                         1 {:type 1}
-                         2 (discord/handle-interaction @state dashboard-url)
-                         {:type 4 :data {:content "Unknown interaction"}})]
-              (json-response 200 resp))
+            (discord/handle-interaction req state dashboard-url)
             (json-response 405 {:error "POST only"}))
 
           "/health"
@@ -166,8 +157,94 @@
 
 ;; --- Entry points ---
 
+(defn- detect-terminal-app
+  "Detect the terminal app running this process for FDA instructions."
+  []
+  (or (System/getenv "TERM_PROGRAM")
+      (try
+        (let [ppid (System/getenv "PPID")
+              proc (-> (Runtime/getRuntime)
+                       (.exec (into-array ["ps" "-o" "comm=" "-p" ppid])))]
+          (.waitFor proc)
+          (some-> proc .getInputStream slurp clojure.string/trim not-empty))
+        (catch Exception _ nil))
+      "your terminal app"))
+
+(defn- check-screentime []
+  (let [db-path (str (System/getProperty "user.home")
+                     "/Library/Application Support/Knowledge/knowledgeC.db")]
+    (if-not (.exists (java.io.File. db-path))
+      {:ok false :msg "knowledgeC.db not found — Screen Time may be disabled"}
+      (try
+        (pod.babashka.go-sqlite3/query db-path
+          ["SELECT COUNT(*) as c FROM ZOBJECT WHERE ZSTREAMNAME = '/app/usage' LIMIT 1"])
+        {:ok true :msg "Screen Time access OK"}
+        (catch Exception e
+          (let [msg (.getMessage e)
+                term (detect-terminal-app)]
+            (if (or (clojure.string/includes? (str msg) "not permitted")
+                    (clojure.string/includes? (str msg) "authorization denied"))
+              {:ok false
+               :msg (str "Screen Time access denied. Grant Full Disk Access to: " term)
+               :instructions
+               [(str "1. Open System Settings → Privacy & Security → Full Disk Access")
+                (str "2. Click + and add: " term)
+                (str "3. Restart your terminal and run: bb init")]}
+              {:ok false :msg (str "Screen Time read error: " msg)})))))))
+
+(defn- check-roam [config]
+  (let [{:keys [token graph]} (:roam-config config)]
+    (if-not (and token graph)
+      {:ok false :msg "Roam API not configured — check secrets.edn :roam"}
+      (try
+        (let [resp (babashka.http-client/post
+                     (str "https://api.roamresearch.com/api/graph/" graph "/q")
+                     {:headers {"X-Authorization" (str "Bearer " token)
+                                "Content-Type" "application/json"}
+                      :body (json/generate-string {:query "[:find (count ?b) :where [?b :block/uid]]"})
+                      :throw false})]
+          (if (= 200 (:status resp))
+            {:ok true :msg (str "Roam API OK (graph: " graph ")")}
+            {:ok false :msg (str "Roam API error: HTTP " (:status resp))}))
+        (catch Exception e
+          {:ok false :msg (str "Roam API unreachable: " (.getMessage e))})))))
+
+(defn- check-discord [config]
+  (let [{:keys [bot-token channel-id]} (:discord-config config)]
+    (if-not (and bot-token channel-id)
+      {:ok false :msg "Discord not configured — check secrets.edn :discord"}
+      (try
+        (discord/send-alert! (:discord-config config)
+                             {:message "🔧 EMS init test — if you see this, Discord is working!"})
+        {:ok true :msg (str "Discord OK (channel: " channel-id ")")}
+        (catch Exception e
+          {:ok false :msg (str "Discord send failed: " (.getMessage e))})))))
+
 (defn init-only! []
-  (db/init!))
+  (let [config (resolve-env (load-config))
+        checks [{:name "Database" :result (do (db/init!) {:ok true :msg "ems.db initialized"})}
+                {:name "Screen Time" :result (check-screentime)}
+                {:name "Roam API" :result (check-roam config)}
+                {:name "Discord" :result (check-discord config)}]]
+    (println "\n━━━ EMS Init ━━━\n")
+    (doseq [{:keys [name result]} checks]
+      (println (str (if (:ok result) "✅" "❌") " " name ": " (:msg result)))
+      (doseq [line (:instructions result)]
+        (println (str "   " line))))
+    ;; Try to open FDA settings if Screen Time failed
+    (when-let [st (some #(when (= "Screen Time" (:name %)) (:result %)) checks)]
+      (when (and (not (:ok st)) (:instructions st))
+        (try
+          (.exec (Runtime/getRuntime)
+                 (into-array ["open" "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"]))
+          (println "\n📎 Opened System Settings → Full Disk Access")
+          (catch Exception _))))
+    (println "\n━━━━━━━━━━━━━━━━")
+    (let [ok-count (count (filter #(:ok (:result %)) checks))
+          total (count checks)]
+      (println (str ok-count "/" total " checks passed."))
+      (when (< ok-count total)
+        (println "Fix the issues above, then run: bb init")))))
 
 (defn start! []
   (let [config (resolve-env (load-config))
