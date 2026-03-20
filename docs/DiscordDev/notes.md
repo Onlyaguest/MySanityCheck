@@ -1,97 +1,50 @@
 # DiscordDev — Design Notes
 
-## Architecture Decision: HTTP-Only Webhook Bot
+**Last updated:** 2026-03-20 12:26
 
-Discord supports two bot models: Gateway (WebSocket) and Interactions Endpoint (HTTP webhook).
+---
 
-**Recommendation: HTTP-only webhook bot.** This is the ideal fit for Babashka:
-- No persistent WebSocket connection needed
-- Discord POSTs interactions to our HTTP endpoint; we respond synchronously
-- Babashka's built-in `org.httpkit.server` handles incoming requests
-- `babashka.http-client` handles outgoing calls (webhooks for alerts, API calls)
-- Instant startup, minimal resource usage, deployable as a simple process
+## 1. What I've Built
 
-**Trade-off:** HTTP-only bots cannot listen to message events or presence — but we don't need those. We only need slash commands + outbound alerts.
+| File | Status | Description |
+|------|--------|-------------|
+| `src/ems/discord.clj` | ✅ Done | Bot API messaging + interaction handler |
+| `scripts/register-commands.clj` | ✅ Done | Registers `/state` slash command with Discord |
 
-## Components
+### discord.clj functions
 
-### 1. Slash Command Handler (`/state`)
-- Babashka HTTP server listens on a port (e.g., 8090)
-- Discord sends POST with interaction payload
-- We verify Ed25519 signature (required by Discord)
-- Read current state from engine (local file or API call)
-- Respond with three-line snapshot
+- `post-message!` — POST to Discord Bot API v10 `/channels/{id}/messages`. Accepts both `:channel-id` and `:channel` keys defensively. Error handling + stderr logging.
+- `format-state` — Formats engine state into one-line: `⚡ Energy: 62 🟡 | ⏱ Time: 3.2h 🟢 | 😌 Mood: 75 🟡 / 💡 推荐: ...`
+- `send-alert!` — Sends engine alert to Discord channel.
+- `send-summary!` — Morning (☀️) or evening (🌙) summary with state + alert count.
+- `verify-signature` — Stub (returns true). TODO: Ed25519.
+- `handle-interaction` — Ring handler for `POST /discord/interactions`. PING (type 1) → pong. APPLICATION_COMMAND (type 2) → formatted `/state` response.
 
-Response format:
-```
-⚡ Energy: 62 🟡 | ⏱ Time: 3.2h 🟢 | 😌 Mood: 75 🟡
-📊 Dashboard: https://ems.vercel.app/2026-03-19
-💡 推荐: 快速冲刺
-```
+### register-commands.clj
 
-### 2. Silent Alerts (Outbound Webhooks)
-- Engine writes alert events (Energy < 30, high fragmentation, triple-low)
-- Discord bot process watches for alerts (file watch or engine calls alert fn directly)
-- Sends to private `#ems-alerts` channel via Discord webhook URL (simple HTTP POST)
-- No bot gateway needed — Discord channel webhooks are just POST endpoints
+- Extracts app-id from bot token (Base64 first segment), reads guild-id from secrets.edn
+- PUTs command to Discord guild endpoint
+- **Already run** — command ID `1484398065115729983` registered in staging guild
 
-### 3. Vercel Link Generation
-- Dashboard URL pattern: `https://<domain>/<date>` (e.g., `/2026-03-19`)
-- Included in `/state` response and morning/evening summaries
+## 2. What Changed Since Initial Notes
 
-### 4. Scheduled Summaries (晨间 08:00 / 晚间 21:00)
-- Engine computes summary data, triggers Discord delivery
-- Bot formats and POSTs to channel via webhook
-- Could be a Babashka cron task or triggered by the engine process
+1. **Webhook → Bot API** — Rewritten per SystemArchitect decision. Uses `POST /channels/{id}/messages` with `Authorization: Bot {token}`.
+2. **Multi-env** — core.clj resolves env, passes `{:bot-token :channel}` to discord fns. `resolve-channel` removed from discord.clj.
+3. **405 bug fixed** — core.clj passes `:channel`, discord.clj expected `:channel-id`. Nil channel → malformed URL → 405. Fixed: accepts both keys via `(or channel-id channel)`.
+4. **Paren fix** — Missing `)` on `defn- post-message!`. Fixed, all 4 tests pass (31 assertions).
+5. **Interaction handler added** — Handles PING + `/state` slash command with state atom deref.
+6. **Slash command registered** — `/state` live in staging guild.
 
-## Ed25519 Signature Verification
+## 3. Open Questions / Blockers
 
-This is the hardest part for Babashka. Discord requires verifying Ed25519 signatures on every interaction request. Options:
-1. **Babashka pod** — use `pod-babashka-buddy` or shell out to a native tool
-2. **JVM Clojure for this component** — if Ed25519 is too painful in bb, run the interaction endpoint as a small JVM Clojure service using `buddy-core` or Java's `java.security`
-3. **Reverse proxy** — let a lightweight proxy (e.g., nginx module or small Go binary) handle signature verification, forward valid requests to Babashka
+- [ ] **Ed25519 verification** — P1. Required before setting Discord Interactions Endpoint URL in prod. Options: pod-babashka-buddy, java.security interop, or reverse proxy.
+- [ ] **Dashboard URL** — Need from FrontendDev. Currently nil in `/state` response.
+- [ ] **Interactions endpoint exposure** — Server is localhost:8400. Need ngrok (dev) or tunnel (prod) for Discord to reach us.
+- [ ] **core.clj call site mismatch** — `make-handler` calls `(discord/handle-interaction @state dashboard-url)` (2-arg old signature). Should be `(discord/handle-interaction req state-atom dashboard-url)` (3-arg ring handler). SystemArchitect needs to update.
 
-**Preferred:** Option 2 as fallback, but try Option 1 first. If neither works cleanly, Option 3.
+## 4. Next Steps
 
-## Phase 2 Changes (2026-03-20)
-
-Addressed P0/P1 from CodeReviewer:
-
-1. **Multi-env config** — added `resolve-channel` fn. Takes the full `secrets` map, reads `:env` (`:staging` or `:prod`), returns the correct channel ID. Caller (core.clj) passes resolved secrets at startup.
-2. **Webhook error handling** — `post-webhook!` now wraps in try/catch, logs to stderr, returns nil on failure. No more unhandled 429/5xx crashes.
-3. **Nil guard on `format-state`** — `(:available-hours time-quality)` could be nil if time-quality computation fails. Now defaults to 0 with `(double (or ... 0))`.
-4. **Ed25519 skipped** — confirmed P1, not blocking. Will address when we set up the interactions endpoint URL with Discord.
-
-Usage pattern for core.clj wiring:
-```clojure
-(let [secrets (edn/read-string (slurp "secrets.edn"))
-      channel (discord/resolve-channel secrets)
-      webhook-url (str "https://discord.com/api/webhooks/" channel)]
-  ;; alerts
-  (doseq [a (:alerts state)] (discord/send-alert! webhook-url a))
-  ;; summaries
-  (discord/send-summary! webhook-url state :morning))
-```
-
-Note: `resolve-channel` returns a channel ID, not a webhook URL. The actual webhook URL needs to be constructed or stored separately. SystemArchitect — do we have a Discord webhook URL in secrets, or are we using the Bot API to post to channels? If Bot API, we need the bot token + channel ID, not a webhook URL. This changes `post-webhook!` to use `POST /api/channels/{id}/messages` with `Authorization: Bot <token>`. Let me know and I'll adjust.
-
-## Open Questions / TODOs
-
-- [ ] **Ed25519 in Babashka** — verify feasibility. Can `pod-babashka-buddy` or `bb` native do Ed25519? If not, what's the lightest JVM fallback?
-- [ ] **Alert delivery model** — does the engine push alerts by calling a Clojure fn, or write to a file/queue that the bot watches? Need contract from EngineBuilder.
-- [ ] **Bot hosting** — HTTP webhook bot still needs to be reachable from Discord. Options: ngrok (dev), Fly.io/VPS with domain + TLS (prod), or Vercel serverless (if we can do Ed25519 there).
-- [ ] **Slash command registration** — one-time setup via Discord REST API. Guild-only for dev (instant), global for prod. Need bot token + app ID.
-- [ ] **Morning/evening summary trigger** — who schedules? If engine owns the cron, it calls bot's send fn. If bot owns cron, it pulls from engine API.
-- [ ] **Dashboard URL pattern** — need from FrontendDev.
-
-## What I Need from Other Agents
-
-| From | What |
-|------|------|
-| **EngineBuilder** | State read contract: how do I get current Energy/Time/Mood? File path? Function call? API endpoint? |
-| **EngineBuilder** | Alert push contract: how are alerts delivered to me? |
-| **EngineBuilder** | Summary data shape for morning/evening messages |
-| **FrontendDev** | Vercel dashboard URL pattern |
-| **SystemArchitect** | Deployment model: where does the bot process run? How is it exposed to Discord? |
-| **SystemArchitect** | Auth model for internal API (if any) |
-| **DataEngineer** | No direct dependency, but need to know data freshness — how stale can Screen Time data be when `/state` is called? |
+1. Coordinate with SystemArchitect to fix `handle-interaction` call site in core.clj (pass ring req + state atom)
+2. Ed25519 spike — test pod-babashka-buddy or `java.security` in bb
+3. End-to-end alert test after FDA reboot — verify alerts land in staging channel
+4. Weekly summary (spec mentions Sunday report) — low priority

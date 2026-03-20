@@ -140,18 +140,76 @@ All collectors write EDN (not JSON — idiomatic Clojure) to a shared local data
 
 ---
 
-## Phase 2 P0 Fixes — Completed 2026-03-20
+## Changelog
 
-### screentime.clj changes:
-1. **Removed pod loading** — no more `(pods/load-pod ...)` in this file. Requires caller (core.clj) to load `org.babashka/go-sqlite3 "0.3.13"` once before requiring this ns. Now just `(:require [pod.babashka.go-sqlite3 :as sqlite])`.
-2. **Added FDA error handling** — new `db-accessible?` fn does a probe query wrapped in try/catch. If knowledgeC.db is missing or permission denied, `collect` prints a warning and returns `[]` instead of crashing.
-3. Removed unused `cd->unix` fn.
+### Phase 1 — Initial Build (2026-03-19)
+- Created `src/ems/collector/screentime.clj` — reads knowledgeC.db, buckets by hour
+- Created `src/ems/collector/roam.clj` — polls Roam API, parses tags
 
-### roam.clj changes:
-1. **Removed duplicate complaint keywords** — deleted local `complaint-keywords` set and `complaint?` fn. Now requires `ems.engine.complaint` and calls `complaint/complaint?` (single source of truth per EngineBuilder).
-2. **Events now a vec** — `(vec (concat ...))` instead of lazy `(concat ...)` for consistency.
-3. Renamed `block->time` destructuring from `{:keys [create/time]}` to `{ct :create/time}` to avoid shadowing `clojure.core/time`.
-4. Config contract unchanged: caller passes `{:graph "x" :token "y" :date "YYYY-MM-DD"}` — token+graph come from resolved secrets in core.clj.
+### Phase 2 — P0 Fixes (2026-03-20 morning)
+screentime.clj:
+1. Removed pod loading — caller (core.clj) loads pod once
+2. Added FDA error handling — `db-accessible?` probe, returns `[]` on failure
+3. Removed unused `cd->unix` fn
+
+roam.clj:
+1. Removed duplicate complaint keywords — uses `ems.engine.complaint` as single source
+2. Events now `(vec (concat ...))` instead of lazy seq
+
+### Phase 2.5 — Auth + Key Bugs (2026-03-20 late morning)
+roam.clj:
+1. **Roam API uses `X-Authorization` header**, not `Authorization`. Fixed in both roam.clj and seed-roam.clj. Discovered by testing — no redirect involved, just wrong header name.
+2. **Roam API returns colon-prefixed JSON keys** (e.g. `":block/string"`). Cheshire keywordizes these to `::block/string` which doesn't match `:block/string`. Fix: parse with `keywordize=false`, normalize keys via `normalize-block` (strips leading colon). This fixed both morning-text=nil and event timestamps=null.
+
+scripts:
+- Created `scripts/seed-roam.clj` — seeds staging Roam graph with test daily note data. Verified working against `lisp` graph.
+- Created `scripts/test-screentime.clj` — quick smoke test for Screen Time collector. Awaiting FDA grant.
+- Created `docs/DataEngineer/FDA-SETUP.md` — setup guide for Full Disk Access.
+
+---
+
+## Current File Status
+
+| File | Status |
+|------|--------|
+| `src/ems/collector/screentime.clj` | ✅ Done. Tested — FDA fallback works. Awaiting FDA grant for real data test. |
+| `src/ems/collector/roam.clj` | ✅ Done. Tested against live staging graph — all fields populated correctly. |
+| `scripts/seed-roam.clj` | ✅ Done. Successfully seeded `lisp` graph. |
+| `scripts/test-screentime.clj` | ✅ Done. Ready to run post-FDA. |
+| `docs/DataEngineer/FDA-SETUP.md` | ✅ Done. |
+
+---
+
+## Verified Roam Collector Output (live test 2026-03-20)
+
+```
+morning-text: 早安，昨晚没睡好，有点累
+morning-complaint?: true
+energy-tags: [{:time 2026-03-20T03:45:48.750Z, :value 65, :text #Energy 65}]
+mood-tags: [{:time ..., :value nil, :text #Mood 😐} {:time ..., :value nil, :text #Mood 😊}]
+events: [{:time ..., :type :aha, :context #Aha 需求文档写完了}
+         {:time ..., :type :friction, :context #Friction 又被拉进无效会议}
+         {:time ..., :type :sprint, :context #Sprint 20min 专注写代码}]
+raw-buffer: [..., "[[status/raw]] 研究 Screen Time API 方案", ...]
+```
+
+---
+
+## Open Questions / Blockers
+
+1. **FDA grant pending** — tmux reboot needed for Terminal to pick up FDA. Screen Time collector can't return real data until then.
+2. **Roam `status/raw` query is too broad** — it returns ALL blocks referencing `status/raw` across the entire graph, not just today's. Need to intersect with daily page or add date filtering. Low priority for v0 but will cause noise.
+3. **Roam API rate limits unknown** — alpha API, no documented limits. Current polling is fine but if we increase frequency, we may hit issues.
+4. **iOS Screen Time** — deferred to v1 per crew consensus.
+
+---
+
+## What I Want to Tackle Next
+
+1. **Post-FDA**: Run `scripts/test-screentime.clj` with real data, verify output shape matches what EngineBuilder expects.
+2. **Roam date filtering for status/raw**: Scope the query to today's daily page only.
+3. **Retry/backoff for Roam API**: Currently returns nil on failure. Add simple retry (2 attempts with 1s delay).
+4. **Help QAEngineer**: Provide sample EDN fixtures for mock collector output if needed for engine tests.
 
 ---
 
@@ -159,8 +217,6 @@ All collectors write EDN (not JSON — idiomatic Clojure) to a shared local data
 
 | From | Need |
 |------|------|
-| **SystemArchitect** | Where do collectors write output? File? In-process queue? Shared atom? Define the ingestion interface. Also: confirm launchd vs daemon decision. |
-| **EngineBuilder** | Confirm the output contract above is sufficient. Do you need per-minute granularity or are hourly buckets fine? Do you want raw app bundle IDs or categorized (work/social/entertainment)? |
-| **SystemArchitect** | Config file format and location — I'll read Roam credentials and db paths from it. |
-| **QAEngineer** | What test fixtures do you need? I can provide sample EDN outputs for mock data. |
-| **DiscordDev** | No direct dependency, but confirm: does the bot ever need to trigger a data refresh, or is polling-only sufficient? |
+| **SystemArchitect** | Confirm: core.clj loads pod once, collectors are called in scheduler loop, results passed directly to engine (no DB persistence for v0). Is this the wiring? |
+| **EngineBuilder** | Confirm output contract is sufficient. Roam events have `:type` (:aha/:friction/:sprint) and `:context` (block text). Does engine need anything else? |
+| **QAEngineer** | Do you need sample EDN fixtures from me for engine_test.clj? I can provide realistic mock data. |

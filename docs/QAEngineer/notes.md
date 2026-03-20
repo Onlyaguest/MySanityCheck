@@ -1,80 +1,85 @@
 # QA Engineer — Design Notes
 
-## (a) Test Strategy for Babashka/Clojure
+**Last updated:** 2026-03-20 12:26 (pre-reboot checkpoint)
 
-### Test Framework
+---
 
-Use `clojure.test` (built into Babashka) with `cognitect-labs/test-runner`. bb.edn config:
+## 1. What I've Built
 
-```clojure
-{:tasks
- {test {:extra-paths ["test"]
-        :extra-deps {io.github.cognitect-labs/test-runner
-                     {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
-        :task (exec 'cognitect.test-runner.api/test)
-        :exec-args {:dirs ["test"]}
-        :org.babashka/cli {:coerce {:nses [:symbol]
-                                    :vars [:symbol]}}}}}
-```
+| File | Status | Description |
+|------|--------|-------------|
+| `test/ems/engine_test.clj` | ✅ Passing | 4 tests, 31 assertions. Smoke test for `compute-state`, calibration (no-complaint, complaint), empty inputs |
+| `scripts/test-pipeline.clj` | ✅ Passing | End-to-end integration: loads config+secrets → resolves staging env → calls Roam collector → feeds engine → prints snapshot → sends Discord message |
+| `bb.edn` test task | ✅ Fixed | Was broken (just `load-file`, never ran tests). Now uses `clojure.test/run-tests` with exit code on failure |
 
-Run: `bb test`, or `bb test --vars ns/specific-test`.
+### Test Results (latest run)
 
-### Test Layers
+**Unit tests (`bb test`):** 4 tests, 31 assertions, 0 failures, 0 errors
 
-1. **Unit tests** — Pure function tests for engine logic (decay formulas, calibration, thresholds). Clojure's immutable data makes this straightforward — pass maps in, assert maps out.
+**Integration pipeline (`bb scripts/test-pipeline.clj`):**
+- Config/secrets load: ✅
+- Staging env resolution: ✅
+- Roam collector (staging graph `lisp`): ✅ connected, returned empty (no seeded data yet)
+- Engine compute-state: ✅ valid snapshot with defaults
+- Discord staging message: ✅ sent successfully
 
-2. **Integration tests** — Full pipeline simulation: mock Screen Time DB (SQLite fixture) + mock Roam data (EDN fixture) → engine → verify Discord payload shape. Use `with-redefs` to stub external calls (Discord API, file system reads).
+## 2. What's Changed Since Last Notes
 
-3. **Contract tests** — Validate API response shapes match what FrontendDev and AI agents expect. Define expected schemas as Clojure specs or simple predicate maps.
+- **bb.edn test task fixed** — Original just loaded the file. Now properly runs `clojure.test/run-tests` and exits non-zero on failure. Had to use fully-qualified `clojure.test/run-tests` because bb's task analysis phase can't resolve aliases from runtime `require`.
+- **Test assertions corrected twice:**
+  1. First run: fixed mood expectation (80→90 because `:aha` adds +10) and empty-inputs alert expectation (0.0 ratio triggers fragmentation alert — correct engine behavior)
+  2. Second run: EngineBuilder added mood regression (10%/hr toward baseline=80). Fixed by using `now-morning` ("08:00") for calibration tests so zero hours elapse and regression doesn't apply
+- **Integration pipeline script created** — Full Roam→Engine→Discord flow verified against staging
+- **Resolved questions:**
+  - Clock injection: ✅ EngineBuilder accepts `now` param on `compute-state`
+  - Complaint detection: ✅ Deterministic keyword matching (no LLM), canonical source is `engine/complaint.clj`
+  - Decay function: Step-based (3 tiers: heavy/moderate/light per hour)
+  - Engine signature: `(compute-state screen-time-data roam-data config now)` — 4 args
 
-4. **Edge case suite** — See below.
+## 3. Open Questions / Blockers
 
-### Key Edge Cases
-
-| Case | What breaks | Test approach |
-|------|-------------|---------------|
-| No Screen Time DB / permissions revoked | Collector returns nil | Engine must produce valid default state |
-| Empty Roam daily page | No #Energy/#Mood tags | Calibration falls back to defaults (E=100, M=80) |
-| 早安 with complaint | Calibration E=80, M=60 | NLP detection accuracy — test with known phrases |
-| 早安 without complaint | Calibration E=100, M=80 | Ensure no false positives |
-| Midnight rollover (UTC+8) | Screen Time uses UTC internally | Verify date boundary conversion |
-| Rapid event burst (#Friction ×5 in 10min) | Energy could go negative | Clamp to 0, verify alert fires |
-| Three lines all critical simultaneously | Emergency intervention | Verify alert priority and message |
-| Sprint spanning midnight | Session split across days | Verify correct day attribution |
-| Stale Screen Time data (>2h old) | Engine uses outdated input | Verify staleness detection/warning |
-
-### Testing Approach for Babashka
-
-- All test data as EDN fixtures (Clojure's native data format)
-- Mock external deps with `with-redefs` — no extra mocking library needed
-- Time-dependent tests: pass time as parameter (no `(System/currentTimeMillis)` calls in engine logic — inject clock)
-- SQLite reading via `babashka.pods` (pod-babashka-go-sqlite3) — test with fixture `.db` files
-
-## (b) Open Questions & TODOs
+### Blockers
+- **No seeded staging Roam data** — Pipeline test ran but Roam returned empty. Need DataEngineer to seed the `lisp` graph with test entries (早安 text, #Aha/#Friction/#Sprint, #Energy/#Mood tags) before I can validate real data flow.
+- **No Screen Time data in staging** — FDA needs to take effect after reboot. Once it does, need DataEngineer to confirm `screentime/collect` works and provide a sample `.db` fixture for offline tests.
 
 ### Open Questions
+1. **Fragmentation alert on zero data** — Engine fires fragmentation alert when there's no screen time (ratio=0.0 < 0.3 threshold). Is this intended? Arguably "no data" ≠ "fragmented". Should engine skip this alert when screen-time input is empty?
+2. **API contract mismatch** — CodeReviewer flagged: FrontendDev expects `:time` / `:timeline` / `:event`, engine outputs `:time-quality` / `:events` / `:tag`. Who adapts? I need the final shape to write contract tests.
+3. **`case` on vector in `recommend-task`** — CodeReviewer P1: unverified in Babashka. Currently passes in tests (bb 1.x seems to support it), but needs explicit confirmation or a default clause added.
+4. **Discord latency SLA** — Still undefined. What's acceptable for alert delivery?
 
-1. **Screen Time DB path** — Need DataEngineer to confirm exact path and schema on target macOS version. Tests depend on realistic fixture files.
-2. **Decay function shape** — Is it continuous (linear/exponential) or step-based? Affects how I test intermediate states between polling intervals.
-3. **Discord message latency SLA** — What's acceptable delay from engine alert → Discord delivery? Need this to set integration test timeouts.
-4. **Complaint detection method** — Is it keyword-based or LLM-based? Determines whether I can write deterministic tests or need fuzzy assertions.
-5. **Clock injection** — EngineBuilder: please accept a `now` parameter (or clock function) in all time-dependent functions. Critical for testability.
+## 4. What I Want to Tackle Next
 
-### TODOs
+1. **Post-reboot: Screen Time integration test** — Once FDA is active, run `scripts/test-pipeline.clj` with real screen time data added to the pipeline
+2. **Seeded Roam test** — Re-run pipeline after DataEngineer seeds staging graph, verify real events flow through engine correctly
+3. **Edge case tests** — Rapid event burst (5× #Friction), energy clamping to 0, emergency alert when all three lines critical
+4. **Contract test** — Once API shape is finalized, write assertions that engine output matches what FrontendDev/DiscordDev consume
+5. **Full-day simulation** — 08:00 calibration → hourly screen time buckets → scattered events → 21:00 evening review, all with injected clock
 
-- [x] Write smoke test: `test/ems/engine_test.clj` — validates compute-state output shape, calibration defaults, complaint path, empty inputs
-- [ ] Create SQLite fixture file mimicking Screen Time DB schema
-- [ ] Write full-day simulation test (08:00 calibration → events → 21:00 reconciliation)
-- [ ] Define API response schema assertions (engine output ↔ FrontendDev contract — mismatch flagged by CodeReviewer)
-- [ ] Set up CI task in bb.edn
-- [ ] Test `case` on vector in `recommend-task` under Babashka (CodeReviewer P1 flag)
+---
 
-## (c) What I Need From Other Agents
+## Reference: Test Strategy
 
-| From | What I need |
-|------|-------------|
-| **DataEngineer** | Screen Time DB path, schema, and a sample `.db` file. Roam parser input/output contract. Polling interval. |
-| **EngineBuilder** | Interface contract: function signatures, input map shape, output map shape. Decay function specification. Confirm clock injection pattern. |
-| **DiscordDev** | Expected Discord message format/embeds. Slash command response shape. Alert trigger → delivery flow. |
-| **FrontendDev** | API response shape you expect (so I can write contract tests for it). |
-| **SystemArchitect** | Deployment model (daemon vs cron) — affects how I test lifecycle. Test/staging environment plan. |
+### Test Layers
+1. **Unit** — Pure engine functions (decay, calibration, thresholds, recommend-task). `clojure.test` + `bb test`.
+2. **Integration** — Full pipeline with real or mock collectors. `scripts/test-pipeline.clj`.
+3. **Contract** — API response shape validation (engine ↔ frontend ↔ discord).
+4. **Edge cases** — Missing data, clamping, midnight rollover, timezone, rapid bursts.
+
+### Approach
+- EDN fixtures for test data
+- `with-redefs` for mocking external deps
+- Clock injection via `now` parameter (no system clock in engine)
+- `now-morning` pattern for calibration tests (zero elapsed time = no regression)
+
+### Key Edge Cases to Cover
+| Case | Status |
+|------|--------|
+| No Screen Time DB / FDA denied | ⬜ Needs fixture |
+| Empty Roam daily page | ✅ Covered in `empty-inputs-produce-defaults` |
+| 早安 with complaint | ✅ Covered in `morning-calibration-with-complaint` |
+| 早安 without complaint | ✅ Covered in `morning-calibration-no-complaint` |
+| Rapid #Friction burst | ⬜ Next |
+| Energy clamp to 0 | ⬜ Next |
+| Triple-low emergency | ⬜ Next |
+| Midnight rollover | ⬜ Later |

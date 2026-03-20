@@ -1,232 +1,108 @@
 # SystemArchitect — Design Notes (Babashka/Clojure)
 
-## A. Architecture Adapted for Babashka
+**Last updated:** 2026-03-20 12:26 (pre-reboot checkpoint)
 
-### Tech Stack
+---
 
-| Layer | Choice | Notes |
-|-------|--------|-------|
-| Runtime | **Babashka** | Fast startup, single binary, long-lived daemon. No heavy computation — bb is sufficient. |
-| HTTP Server | **http-kit** (built into bb) | Ring-compatible, async. Serves read-only API + Discord Interactions Endpoint. |
-| SQLite | **pod-babashka-go-sqlite3** | Babashka pod. Reads Apple's knowledgeC.db, writes to ems.db. |
-| Scheduler | **chime** or manual loop | Morning calibration (08:00), evening review (21:00), Screen Time polling (30 min). |
-| Discord | **REST API + Interactions Endpoint** | No gateway WebSocket. Slash commands via HTTP POST. Alerts via webhook. |
-| Dashboard | **Vercel** static HTML/JS | Fetches from API. No bb involvement. |
-| Deployment | **macOS launchd** | Single bb process, auto-starts on login. |
-| Config | **EDN files** | Clojure-native. Energy rates, thresholds, event types in `config.edn`. |
+## 1. What I've Built (files + status)
 
-### Data Flow
+### Files I own / created
 
-```
-┌──────────────────────────────────────────────────┐
-│              USER'S MAC (launchd)                 │
-│                                                   │
-│  bb src/ems/core.clj  (single process)            │
-│                                                   │
-│  ┌────────────┐ ┌──────────┐ ┌────────────────┐  │
-│  │ collector/  │ │collector/│ │ collector/     │  │
-│  │ screentime  │ │ roam     │ │ health (future)│  │
-│  └─────┬──────┘ └────┬─────┘ └───────┬────────┘  │
-│        │             │               │            │
-│        ▼             ▼               ▼            │
-│  ┌────────────────────────────────────────────┐   │
-│  │          ems.db (SQLite via pod)            │   │
-│  └───────────────────┬────────────────────────┘   │
-│                      │                            │
-│                      ▼                            │
-│  ┌────────────────────────────────────────────┐   │
-│  │       engine/ (pure functions)              │   │
-│  │  compute-energy, compute-time-quality,     │   │
-│  │  compute-mood, decide, detect-alerts       │   │
-│  └──────┬─────────────────────┬───────────────┘   │
-│         │                     │                   │
-│         ▼                     ▼                   │
-│  ┌──────────────┐   ┌──────────────────┐          │
-│  │ api/         │   │ discord/         │          │
-│  │ http-kit     │   │ REST + webhook   │          │
-│  │ GET /state   │   │ /state slash cmd │          │
-│  │ (read-only)  │   │ silent alerts    │          │
-│  └──────────────┘   └──────────────────┘          │
-│                                                   │
-└───────────────────────────────────────────────────┘
-       │ (Cloudflare Tunnel)
-       ▼
-┌────────────────┐   ┌──────────────┐
-│Vercel Dashboard│   │ AI Agents    │
-│(static page)   │   │ GET /state   │
-└────────────────┘   └──────────────┘
-```
+| File | Status | Description |
+|------|--------|-------------|
+| `bb.edn` | ✅ Done | Pod 0.3.13, cheshire dep, tasks: run, init, test |
+| `config.edn` | ✅ Done | All energy/mood/time rates from spec v0.2, alert thresholds, complaint keywords, server port, polling intervals, `:secrets-file` pointer |
+| `secrets.edn` | ✅ Done | Multi-env: `:env :staging`, `:roam {:staging {:token :graph} :prod {...}}`, `:discord {:bot-token :guild-id :staging-channel :prod-channel}` |
+| `secrets.edn.template` | ✅ Done | Commented template with placeholder values |
+| `.gitignore` | ✅ Done | Excludes ems.db, secrets.edn, .DS_Store, old spec files |
+| `src/ems/core.clj` | ✅ Done | Full daemon: config loading, env resolution, pod init, scheduler, collector→engine→discord wiring, HTTP API, `bb init` diagnostics |
+| `src/ems/db.clj` | ✅ Done | Schema init (events, screentime, daily_state), generic query/execute helpers. Pod loaded by core.clj. |
 
-### Key Decisions
-
-1. **Single bb process.** http-kit + scheduler + Discord handler share one process. Event-driven, not CPU-bound — bb handles this fine.
-
-2. **Discord via REST, not WebSocket gateway.** Register Interactions Endpoint URL → Discord POSTs slash commands to our http-kit server. Alerts via webhook (simple HTTP POST). No bot library needed.
-
-3. **Engine is pure functions.** `(compute-state db as-of)` → map. No side effects. Testable.
-
-4. **EDN config.** Energy rates, event mappings, thresholds in `config.edn`. Supports customizable rules natively.
-
-### Project Structure
+### Current project tree
 
 ```
 ems/
-├── bb.edn                  # deps, pods
-├── config.edn              # user rules & thresholds
+├── bb.edn
+├── config.edn
+├── secrets.edn          (gitignored)
+├── secrets.edn.template
+├── .gitignore
 ├── src/ems/
-│   ├── core.clj            # entry: starts server + scheduler
-│   ├── db.clj              # SQLite helpers, schema init
+│   ├── core.clj          ← SystemArchitect (me)
+│   ├── db.clj            ← SystemArchitect (me)
+│   ├── engine.clj        ← EngineBuilder
+│   ├── engine/
+│   │   ├── rates.clj     ← EngineBuilder
+│   │   └── complaint.clj ← EngineBuilder
 │   ├── collector/
-│   │   ├── screentime.clj
-│   │   ├── roam.clj
-│   │   └── health.clj
-│   ├── engine.clj          # three-line fusion
-│   ├── api.clj             # Ring handlers
-│   └── discord.clj         # webhook + interactions
-├── resources/schema.sql
-└── com.ems.daemon.plist
-```
-
-### API Contract
-
-```
-GET /state
-→ {"energy": 72, "energy_status": "良好",
-   "mood": 65, "mood_status": "平和",
-   "time_available": 3.5, "time_quality": 0.7, "time_status": "充裕",
-   "recommendation": "高难度创造",
-   "phase": "action",
-   "alerts": []}
-
-GET /state/history?date=2026-03-19
-→ {"date": "2026-03-19", "events": [...], "snapshots": [...]}
-
-GET /state/week
-→ {"days": [...], "trends": {...}, "top_drains": [...]}
+│   │   ├── screentime.clj ← DataEngineer
+│   │   └── roam.clj       ← DataEngineer
+│   └── discord.clj        ← DiscordDev
+└── test/ems/
+    └── engine_test.clj    ← QAEngineer
 ```
 
 ---
 
-## B. Open Questions & TODOs
+## 2. What Changed Since Last Notes Update
 
-1. **Screen Time FDA** — knowledgeC.db requires Full Disk Access. #1 blocker. DataEngineer to confirm.
-2. **iOS Screen Time** — defer to v2? Need coordinator confirmation.
-3. **Daemon vs cron** — I recommend daemon (http-kit must be always-on for API). Single process.
-4. **Cloud relay** — Cloudflare Tunnel (free, stable) is my pick. Alternatives: ngrok, Tailscale Funnel.
-5. **Roam integration path** — API (real-time) vs JSON export (batch)? DataEngineer to confirm.
-6. **Dashboard auth** — Cloudflare Access if using CF Tunnel. Otherwise bearer token.
-7. **Phase field** — propose `:raw | :buffer | :action | :recovery` in state snapshot. EngineBuilder to confirm.
+### P0 fixes (from CodeReviewer)
+- **bb.edn:** Pod version fixed `0.3.1` → `0.3.13`; added test path + task
+- **db.clj:** Removed duplicate pod loading; now expects pod loaded by core.clj
+- **core.clj:** Full rewrite — was a stub, now complete daemon
 
----
+### P1 fixes
+- **Discord: Bot API decision.** Dropped webhook URLs entirely. All Discord sends use `POST /channels/{channel-id}/messages` with bot token. `discord-config` is env-resolved by `resolve-env` in core.clj.
+- **core.clj wiring:** `run-cycle!` calls `discord/send-alert!` and scheduler calls `discord/send-summary!` with `(:discord-config config)` — Discord owns the HTTP call, core owns the wiring.
+- **Discord interactions route:** `POST /discord/interactions` delegates to `discord/handle-interaction` (DiscordDev's Ring handler). Handles ping (type 1) and slash commands (type 2).
+- **CORS:** All routes return CORS headers. OPTIONS preflight handled.
+- **`:channel` → `:channel-id`** in `resolve-env` for consistency with discord.clj.
+- **Roam auth header:** Fixed `Authorization` → `X-Authorization` in init check.
+- **Terminal detection:** Fixed `ProcessHandle/current` (JVM-only) → `TERM_PROGRAM` env var + `ps` via `PPID`.
 
-## C. What I Need From Other Agents
-
-| From | Need |
-|------|------|
-| **DataEngineer** | knowledgeC.db access feasibility. Roam path (API vs export). Collected data record shape. |
-| **EngineBuilder** | Agree on `(compute-state db as-of)` interface. Confirm phase field. StateSnapshot keys. |
-| **DiscordDev** | Confirm Interactions Endpoint approach. Slash command list. Webhook message format. |
-| **FrontendDev** | Confirm API shape works. Additional endpoints needed? |
-| **QAEngineer** | Integration test boundaries. I'll provide in-memory SQLite test harness. |
-| **Coordinator** | Decisions: iOS defer? Cloud relay? Dashboard auth? |
-
----
-
-## D. Cross-Agent Alignment (after reading all notes)
-
-### Resolved: Answers to Other Agents' Questions
-
-**→ DataEngineer asks:** "Where do collectors write output?"
-**Answer:** Collectors write directly to `ems.db` (SQLite) via the pod. All collectors run in the same bb process, share the pod connection. No files, no queues. Just `INSERT INTO events ...` and `INSERT INTO screentime ...`. The engine reads from the same db.
-
-**→ DataEngineer asks:** "EDN vs JSON for internal data?"
-**Answer:** EDN internally (idiomatic). JSON only at the HTTP API boundary (for AI agents and Vercel dashboard). `cheshire.core` handles the conversion in `api.clj`.
-
-**→ DataEngineer asks:** "Config file format and location?"
-**Answer:** `config.edn` at project root. Contains: db paths, Roam graph name + API token, Discord webhook URL + app ID, polling intervals, energy/mood rate overrides.
-
-**→ DiscordDev asks:** "Where does the bot process run? How is it exposed to Discord?"
-**Answer:** Same bb process as everything else. http-kit serves on `localhost:8400`. Cloudflare Tunnel exposes it to the internet. Discord Interactions Endpoint URL = tunnel URL + `/discord/interactions`. Alert webhooks go outbound — no exposure needed.
-
-**→ FrontendDev asks:** "Where does state live so Vercel can read it?"
-**Answer:** Two options:
-1. **Vercel reads from the tunnel URL** (`GET /state`) — simplest, but depends on tunnel uptime.
-2. **Engine pushes state snapshot to Cloudflare KV or R2** on each update — Vercel reads from there. More reliable, adds a write step.
-I recommend option 1 for v0, option 2 if tunnel reliability is a problem.
-
-**→ QAEngineer asks:** "Deployment model? Test environment plan?"
-**Answer:** Daemon (launchd). For testing: `bb test` runs all tests with in-memory SQLite (no launchd needed). Integration tests use fixture `.db` files.
-
-### Debate: Daemon vs Cron
-
-EngineBuilder and DataEngineer lean toward cron. I maintain **daemon is required** because:
-- http-kit server must be always-on for `/state` API (AI agents query anytime)
-- Discord Interactions Endpoint must be always-on (Discord POSTs slash commands anytime)
-- Cloudflare Tunnel needs a persistent process to maintain the connection
-
-**Compromise:** Single daemon process that runs http-kit + scheduler. The scheduler triggers collector runs and engine recomputation on intervals (effectively cron-inside-daemon). EngineBuilder's pure functions don't care — they get called either way.
-
-### Risk: Ed25519 Signature Verification (from DiscordDev)
-
-DiscordDev flagged this correctly. Discord requires Ed25519 verification on every interaction POST. Options in priority order:
-1. **Try `buddy-core` via bb pod or classpath** — if Ed25519 is available, done.
-2. **Shell out to `openssl` or a small Go/Rust binary** for signature verification only.
-3. **Cloudflare Worker as proxy** — verify signature at the edge, forward valid requests to tunnel. This is elegant if we're already using CF Tunnel.
-
-I recommend exploring option 3 — it offloads crypto from bb entirely and adds zero latency (CF Worker runs at edge).
-
-### FrontendDev: vercel-babashka Approach
-
-FrontendDev proposes server-side hiccup rendering on Vercel. This is a good call — keeps the entire stack in Clojure. The dashboard becomes a Babashka serverless function that fetches `/state` from our tunnel and renders HTML. No client-side JS framework needed.
+### `bb init` rewrite
+Full diagnostic on init:
+1. Creates ems.db with schema
+2. Checks Screen Time FDA — detects terminal app, prints step-by-step instructions, auto-opens System Settings
+3. Checks Roam API — test query against configured graph
+4. Checks Discord — sends test message to env-resolved channel
+5. Prints pass/fail summary
 
 ---
 
-## E. P0 Fixes Applied (2026-03-20)
+## 3. Open Questions / Blockers
 
-### 1. bb.edn — pod version fixed to 0.3.13
-- Was `"0.3.1"`, now `"0.3.13"` (matches all consumers)
-- Added `"test"` to `:paths`
-- Added `test` task
+### Blocking
+- **FDA reboot pending.** We're about to reboot tmux so FDA takes effect for kiro-cli-chat. After reboot, `bb init` should pass the Screen Time check.
 
-### 2. db.clj — removed pod loading
-- Removed `(pods/load-pod ...)` and `(require '[babashka.pods])` 
-- Now requires `pod.babashka.go-sqlite3` directly (pod loaded once in core.clj)
-
-### 3. core.clj — full rewrite
-- **Safe config loading:** `load-edn` with try/catch, handles missing files gracefully
-- **Multi-env secrets resolution:** `resolve-env` reads `:env` from secrets.edn, resolves `:roam-config` and `:discord-config` to the active env's values
-- **State atom:** `(defonce state (atom nil))` — cached current snapshot
-- **`run-cycle!`:** collectors → engine → atom → discord alerts. Full pipeline wired.
-- **Scheduler:** minute-resolution loop checking intervals for screentime (30min) and roam (60min). Morning summary at 08:00, evening at 21:00. Daily flag reset at midnight.
-- **`/state` API:** serves real engine state from atom (JSON + CORS). Returns 503 if no cycle has run yet.
-- **`/health` endpoint:** for monitoring.
-- **First cycle runs immediately** on startup before scheduler takes over.
-- **All external calls wrapped in try/catch** — collector failures don't crash the daemon.
-
-### Still needs (from other agents)
-- DataEngineer: remove pod loading from screentime.clj, add FDA error handling
-- EngineBuilder: consolidate complaint keywords
-- DiscordDev: update discord.clj for multi-env channel selection
+### Open (not blocking v0)
+1. **Cloud relay not set up.** Cloudflare Tunnel needed for Vercel dashboard + AI agents to reach localhost:8400. Not blocking local dev.
+2. **Ed25519 verification skipped.** Discord interactions endpoint works but unsigned. P1 — recommend CF Worker proxy approach.
+3. **Dashboard URL not configured.** `config.edn` needs `:dashboard {:url "https://..."}` once Vercel is deployed. Currently nil — interactions response omits dashboard link.
+4. **launchd plist not created.** Needed for auto-start on login. Low priority — `bb run` works for now.
+5. **Config rates vs hardcoded rates.** `config.edn` has rates, `engine/rates.clj` hardcodes them. Duplication. EngineBuilder should read from config or we remove config rates.
+6. **DB column names vs collector output keys.** `pickups` vs `unlock-count`, `context_switches` vs `app-switches`. Nobody writes to DB yet so not blocking, but needs alignment.
 
 ---
 
-## F. P1 Decision: Discord Bot API over Webhooks (2026-03-20)
+## 4. What I Want to Tackle Next
 
-**Decision:** Use Discord Bot API, not webhook URLs.
+1. **Post-reboot:** Run `bb init` to verify FDA works, then `bb run` for first live cycle
+2. **Cloudflare Tunnel setup** — expose localhost:8400, get a stable URL for Discord interactions + Vercel dashboard
+3. **Discord slash command registration** — one-time `POST /applications/{app-id}/guilds/{guild-id}/commands` to register `/state`
+4. **launchd plist** — auto-start daemon on login
+5. **Wire DB persistence** — collectors should INSERT into ems.db, not just pass data in-memory (needed for history/trends)
 
-**Why:**
-- `secrets.edn` already has `bot-token`, `guild-id`, staging/prod channel IDs
-- Webhook URLs would require manual per-channel creation — extra setup step
-- Bot API lets us target env-resolved channel ID programmatically
-- Slash command registration needs bot token anyway — one auth mechanism
+---
 
-**Contract for DiscordDev:**
-- Send messages: `POST https://discord.com/api/v10/channels/{channel-id}/messages`
-- Header: `Authorization: Bot {bot-token}`
-- Body: `{"content": "message text"}`
-- `bot-token` from `(:bot-token (:discord-config config))`
-- `channel-id` from `(:channel (:discord-config config))` (already env-resolved by core.clj)
-- Drop `post-webhook!` / `webhook-url` params entirely
-- Replace with `post-channel!` taking `bot-token`, `channel-id`, `content`
+## Architecture Decisions Log
 
-**Impact on core.clj:** Update `run-cycle!` and scheduler to pass `discord-config` instead of `webhook-url` to discord functions. Minor change — will do when DiscordDev updates discord.clj interface.
+| Decision | Choice | Date | Rationale |
+|----------|--------|------|-----------|
+| Runtime | Babashka | 03-19 | Co directive. Fast startup, single binary. |
+| Discord integration | Bot API (not webhooks) | 03-20 | Already have bot-token + channel IDs. One auth mechanism. |
+| Daemon vs cron | Daemon (launchd) | 03-19 | http-kit + Discord interactions must be always-on. Scheduler runs inside. |
+| Pod loading | Single point in core.clj | 03-20 | CodeReviewer P0: was double-loaded in db.clj + screentime.clj. |
+| Secrets | Multi-env secrets.edn | 03-20 | `:env` key selects staging/prod. `resolve-env` flattens at startup. |
+| Cloud relay | Cloudflare Tunnel (planned) | 03-19 | Free, stable. Not yet set up. |
+| Ed25519 | Deferred (CF Worker proxy planned) | 03-20 | bb lacks native Ed25519. CF Worker at edge is cleanest. |
