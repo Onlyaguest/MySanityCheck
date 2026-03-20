@@ -6,17 +6,21 @@
 ;; --- Bot API messaging ---
 
 (defn- post-message!
-  "POST message to Discord channel via Bot API. Returns nil on error."
-  [{:keys [bot-token channel-id]} content]
-  (try
-    (http/post (str "https://discord.com/api/v10/channels/" channel-id "/messages")
-               {:headers {"Authorization" (str "Bot " bot-token)
-                          "Content-Type"  "application/json"}
-                :body (json/generate-string {:content content})})
-    (catch Exception e
-      (binding [*out* *err*]
-        (println "discord:" (.getMessage e)))
-      nil)))
+  "POST message to Discord channel via Bot API. Returns nil on error.
+   Accepts :channel-id or :channel key in config."
+  [{:keys [bot-token channel-id channel]} content]
+  (let [ch (or channel-id channel)]
+    (if-not ch
+      (do (binding [*out* *err*] (println "discord: no channel-id in config")) nil)
+      (try
+        (http/post (str "https://discord.com/api/v10/channels/" ch "/messages")
+                   {:headers {"Authorization" (str "Bot " bot-token)
+                              "Content-Type"  "application/json"}
+                    :body (json/generate-string {:content content})})
+        (catch Exception e
+          (binding [*out* *err*]
+            (println "discord:" (.getMessage e)))
+          nil)))))
 
 (defn format-state
   [{:keys [energy mood time-quality recommendation]}]

@@ -37,7 +37,7 @@
       :discord-config (let [d (:discord config)]
                         {:bot-token (:bot-token d)
                          :guild-id  (:guild-id d)
-                         :channel   (if (= env :prod)
+                         :channel-id (if (= env :prod)
                                       (:prod-channel d)
                                       (:staging-channel d))}))))
 
